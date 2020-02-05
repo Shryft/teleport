@@ -518,9 +518,11 @@ function tlp_build(tlp_wnd, x, y)
 	-- Input
 	local changed, newInt = imgui.InputInt("    ", set_pos_roll)
 	if changed then
-		-- set limit to max and min roll angle according to x-plane dataref
-		if newInt < -180 or newInt > 180 then
-			set_pos_roll = set_pos_roll
+		-- create loop for roll target value
+		if newInt < -180 then
+			set_pos_roll = set_pos_roll + 359
+		elseif newInt > 180 then
+			set_pos_roll = set_pos_roll - 359
 		else
 			set_pos_roll = newInt
 		end
@@ -547,7 +549,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Input
 	local changed, newInt = imgui.InputInt("     ", set_pos_heading)
 	if changed then
-		-- create loop for heading
+		-- create loop for heading target value
 		if newInt < 0 then
 			set_pos_heading = newInt + 360
 		elseif newInt >= 360 then
