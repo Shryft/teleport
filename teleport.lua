@@ -98,6 +98,9 @@ dataref("acf_loc_vx", "sim/flightmodel/position/local_vx", "writable")
 dataref("acf_loc_vy", "sim/flightmodel/position/local_vy", "writable")
 dataref("acf_loc_vz", "sim/flightmodel/position/local_vz", "writable")
 
+-- This is the multiplier on ground speed, for faster travel via double-distance
+dataref("time_gs", "sim/time/ground_speed", "writable")
+
 ----------------------------------------------------------------------------
 -- Local variables
 ----------------------------------------------------------------------------
@@ -106,7 +109,7 @@ tlp_wnd = nil
 -- Window width
 local tlp_x = 480
 -- Window height
-local tlp_y = 480
+local tlp_y = 540
 -- Window shown
 tlp_show_only_once = 0
 -- Window hidden
@@ -255,6 +258,25 @@ function spd_up(speed, heading, pitch)
 	acf_loc_vx = speed * math.sin(heading) * math.cos(pitch)
 	acf_loc_vy = speed * math.sin(pitch)
 	acf_loc_vz = speed * math.cos(heading) * -1 * math.cos(pitch)
+end
+
+-- Freeze an aircraft in space except time
+function freeze(lat, lon, alt, pitch, roll, heading, gs)
+	-- Input variables
+	local lat = lat
+	local lon = lon
+	local alt = alt
+	local pitch = pitch
+	local roll = roll
+	local heading = heading
+	local gs = gs
+	-- If true
+	if freeze_on then
+		-- Teleport to target every time except location
+		jump(lat, lon, alt)
+		move(pitch, roll, heading)
+		spd_up(gs, heading, pitch)
+	end
 end
 
 ----------------------------------------------------------------------------
@@ -692,6 +714,13 @@ function tlp_build(tlp_wnd, x, y)
 		-- Speed up aircraft
 		spd_up(set_spd_gnd, acf_pos_heading, acf_pos_pitch)
 	end
+	
+	-- Button that freeze aircraft
+	imgui.TextUnformatted("")
+	if imgui.Button("FREEZE", tlp_x, but_2_y) then
+		-- Freeze an aircraft
+		freeze_toggle()
+	end
 end
 
 ----------------------------------------------------------------------------
@@ -718,7 +747,7 @@ end
 
 -- Toggle imgui floating window
 function  tlp_toggle()
-	-- Invert logical expression of variable
+	-- Invert toggle variable
 	tlp_show_wnd = not tlp_show_wnd
 	-- If true
 	if tlp_show_wnd then
@@ -736,6 +765,28 @@ function  tlp_toggle()
 			tlp_hide_only_once = 1
 			tlp_show_only_once = 0
 		end
+	end
+end
+
+-- Freeze aircraft toggle
+function freeze_toggle()
+	-- Invert toggle variable
+	freeze_on = not freeze_on
+	-- If true
+	if freeze_on then
+		-- Get targets
+		get_loc()
+		get_alt()
+		get_pos()
+		get_spd()
+		-- Turn off ground speed
+		time_gs = 0
+	-- if not
+	else
+		-- Return aircraft target speed
+		spd_up(set_spd_gnd, set_pos_heading, set_pos_pitch)
+		-- Turn on ground speed
+		time_gs = 1
 	end
 end
 
@@ -763,3 +814,9 @@ get_loc()
 get_alt()
 get_pos()
 get_spd()
+
+-- Freeze event
+function freeze_event()
+	freeze(null, null, set_loc_alt, set_pos_pitch, set_pos_roll, set_pos_heading, 0)
+end
+do_every_frame("freeze_event()")
