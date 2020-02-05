@@ -822,3 +822,5 @@ function freeze_event()
 	freeze(null, null, set_loc_alt, set_pos_pitch, set_pos_roll, set_pos_heading, 0)
 end
 do_every_frame("freeze_event()")
+-- Fix ground speed time if aircraft or flight was restarted during freeze function
+time_gs = 1
