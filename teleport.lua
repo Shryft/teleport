@@ -117,8 +117,11 @@ local tlp_y = 640
 
 -- Aircraft file name
 local acf_name = string.gsub(AIRCRAFT_FILENAME, ".acf", "")
--- Save targets to file operation status
+
+-- Target data read/write status
 local target_status = ""
+-- Target data name
+local target_name = ""
 
 ----------------------------------------------------------------------------
 -- Global variables
@@ -208,56 +211,93 @@ function get_spd()
 end
 
 -- Save target to TXT file
-function target(x, y)
-	local x = x
-	local y = y
+function target(action, state, name)
+	-- Input variables
+	local action = action
+	local state = state
+	local name = name
+	-- Local variables
 	local file
-	--local file_local = (AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt")
-	if x == "load" then
-		-- 
-		target_status = "Loaded" .. " " .. y
+	local file_local = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
+	local file_global = SCRIPT_DIRECTORY .. "teleport_targets.txt"
+	target_value = {}
+	-- Read target data
+	if action == "load" then
 		-- Load local targets
-		if y == "local" then
-			dofile(AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt")
+		if state == "local" then
+			-- Open file in local directory
+			file = io.open(file_local, "r")
 		-- Load global targets
-		elseif y == "global" then
-			dofile(SCRIPT_DIRECTORY .. "teleport_targets.txt")
+		elseif state == "global" then
+			-- Open file in global directory
+			file = io.open(file_global, "r")
 		end
-	elseif x == "save" or x == "delete" then
+		-- Load target data to array
+		for i in string.gmatch(file:read(), "%S+") do
+			-- Load string type
+			table.insert(target_value, i)
+		end
+		-- Convert strings to numbers (only targets except name)
+		for i = 1, 7 do
+			target_value[i] = tonumber(target_value[i])
+		end
+		-- Load data from array to target variables and inputs
+		set_loc_lat = target_value[1]
+		set_loc_lat_str = tostring(target_value[1])
+		set_loc_lon = target_value[2]
+		set_loc_lon_str = tostring(target_value[2])
+		set_loc_alt = target_value[3]
+		set_pos_pitch = target_value[4]
+		set_pos_roll = target_value[5]
+		set_pos_heading = target_value[6]
+		set_spd_gnd = target_value[7]
+		-- Log
+		target_status = "Loaded '" .. target_value[8] .. "' from " .. state
+	-- Write target data
+	elseif action == "save" or action == "delete" then
 		-- Select target type
-		if y == "local" then
+		if state == "local" then
 			-- Create (or open) and start write file in local directory
-			file = io.open(AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt", "w")
-		elseif y == "global" then
+			file = io.open(file_local, "a+")
+		elseif state == "global" then
 			-- Create (or open) and start write file in script directory
-			file = io.open(SCRIPT_DIRECTORY .. "teleport_targets.txt", "w")
+			file = io.open(file_global, "a+")
 		end
 		-- Select action type
-		if x == "save" then
-			-- 
-			target_status = "Saved" .. " " .. y
+		if action == "save" then
+			-- Log
+			target_status = "Saved" .. " " .. state
 			-- File description
-			file:write("----------------------------------------------------------------------------\n")
-			file:write("-- This file contains teleport scripts targets.\n")
-			file:write("-- If you delete it, you pre saved targets will be cleaned!\n")
-			file:write("----------------------------------------------------------------------------\n\n")
+			--file:write("----------------------------------------------------------------------------\n")
+			--file:write("-- This file contains teleport scripts targets.\n")
+			--file:write("-- If you delete it, you pre saved targets will be cleaned!\n")
+			--file:write("----------------------------------------------------------------------------\n\n")
 			-- Write target variables
-			--file:write(string.format('target_name = %s\n', target_name))
-			file:write(string.format('set_loc_lat = %s\n', set_loc_lat))
-			file:write(string.format('set_loc_lon = %s\n', set_loc_lon))
-			file:write(string.format('set_loc_alt = %s\n', set_loc_alt))
-			file:write(string.format('set_pos_pitch = %s\n', set_pos_pitch))
-			file:write(string.format('set_pos_roll = %s\n', set_pos_roll))
-			file:write(string.format('set_pos_heading = %s\n', set_pos_heading))
-			file:write(string.format('set_spd_gnd = %s\n', set_spd_gnd))
-		elseif x == "delete" then
-			-- 
-			target_status = "Deleted" .. " " .. y
+			--file:seek("end")
+			file:write(set_loc_lat)
+			file:write(" ")
+			file:write(set_loc_lon)
+			file:write(" ")
+			file:write(set_loc_alt)
+			file:write(" ")
+			file:write(set_pos_pitch)
+			file:write(" ")
+			file:write(set_pos_roll)
+			file:write(" ")
+			file:write(set_pos_heading)
+			file:write(" ")
+			file:write(set_spd_gnd)
+			file:write(" ")
+			file:write(name)
+			file:write(string.format("\n"))
+		elseif action == "delete" then
+			-- Log
+			target_status = "Deleted" .. " " .. state
 			-- write new empty file
 		end
-		-- Finish writing file
-		file:close()
 	end
+	-- Close file
+	file:close()
 end
 
 ----------------------------------------------------------------------------
@@ -789,7 +829,7 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.TextUnformatted("")
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save local", but_1_x - indent / 2, but_1_y) then
-		target("save", "local")
+		target("save", "local", target_name)
 	end
 	-- Button that load targets from local aircraft folder
 	imgui.SameLine()
@@ -803,9 +843,6 @@ function tlp_build(tlp_wnd, x, y)
 	if imgui.Button("Delete local", but_1_x - indent / 2, but_1_y) then
 		target("delete", "local")
 	end
-	-- Target save/load status
-	imgui.SameLine()
-	imgui.TextUnformatted(target_status)
 	
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save global", but_1_x - indent / 2, but_1_y) then
@@ -823,6 +860,16 @@ function tlp_build(tlp_wnd, x, y)
 	if imgui.Button("Delete global", but_1_x - indent / 2, but_1_y) then
 		target("delete", "global")
 	end
+	
+	-- Create input string for writing target data
+    local changed, newVal = imgui.InputText("name", target_name, 40) -- if string inputs label is the same, then the variables overwrite each other
+    -- If input value is changed by user
+    if changed then
+        target_name = newVal
+    end
+	
+	-- Target save/load status
+	imgui.TextUnformatted(target_status)
 end
 
 ----------------------------------------------------------------------------
