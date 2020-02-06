@@ -105,37 +105,45 @@ dataref("time_gs", "sim/time/ground_speed", "writable")
 -- Local variables
 ----------------------------------------------------------------------------
 -- Imgui script window
-tlp_wnd = nil
+local tlp_wnd = nil
+-- Window shown
+local tlp_show_only_once = 0
+-- Window hidden
+local tlp_hide_only_once = 0
 -- Window width
 local tlp_x = 480
 -- Window height
-local tlp_y = 540
--- Window shown
-tlp_show_only_once = 0
--- Window hidden
-tlp_hide_only_once = 0
+local tlp_y = 640
 
+-- Aircraft file name
+local acf_name = string.gsub(AIRCRAFT_FILENAME, ".acf", "")
+-- Save targets to file operation status
+local target_status = ""
+
+----------------------------------------------------------------------------
+-- Global variables
+----------------------------------------------------------------------------
 -- Latitude input string variable, world coordinates in degrees
-local set_loc_lat_str = ""
+set_loc_lat_str = ""
 -- Convert latitude string variable to integer
-local set_loc_lat = 0
+set_loc_lat = 0
 -- Longitude input variable, world coordinates in degrees, string
-local set_loc_lon_str = ""
+set_loc_lon_str = ""
 -- Convert longitude string variable to integer
-local set_loc_lon = 0
+set_loc_lon = 0
 
 -- Altitude input variable in meters
-local set_loc_alt = 0
+set_loc_alt = 0
 
 -- Aircraft position input pitch
-local set_pos_pitch = 0
+set_pos_pitch = 0
 -- Aircraft position input roll
-local set_pos_roll = 0
+set_pos_roll = 0
 -- Aircraft position input heading
-local set_pos_heading = 0
+set_pos_heading = 0
 
 -- Aircraft groundspeed input
-local set_spd_gnd = 0
+set_spd_gnd = 0
 
 ----------------------------------------------------------------------------
 -- XPLM functions
@@ -197,6 +205,59 @@ end
 function get_spd()
 	-- read current true airspeed
 	set_spd_gnd = acf_spd_air_ms
+end
+
+-- Save target to TXT file
+function target(x, y)
+	local x = x
+	local y = y
+	local file
+	--local file_local = (AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt")
+	if x == "load" then
+		-- 
+		target_status = "Loaded" .. " " .. y
+		-- Load local targets
+		if y == "local" then
+			dofile(AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt")
+		-- Load global targets
+		elseif y == "global" then
+			dofile(SCRIPT_DIRECTORY .. "teleport_targets.txt")
+		end
+	elseif x == "save" or x == "delete" then
+		-- Select target type
+		if y == "local" then
+			-- Create (or open) and start write file in local directory
+			file = io.open(AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt", "w")
+		elseif y == "global" then
+			-- Create (or open) and start write file in script directory
+			file = io.open(SCRIPT_DIRECTORY .. "teleport_targets.txt", "w")
+		end
+		-- Select action type
+		if x == "save" then
+			-- 
+			target_status = "Saved" .. " " .. y
+			-- File description
+			file:write("----------------------------------------------------------------------------\n")
+			file:write("-- This file contains teleport scripts targets.\n")
+			file:write("-- If you delete it, you pre saved targets will be cleaned!\n")
+			file:write("----------------------------------------------------------------------------\n\n")
+			-- Write target variables
+			--file:write(string.format('target_name = %s\n', target_name))
+			file:write(string.format('set_loc_lat = %s\n', set_loc_lat))
+			file:write(string.format('set_loc_lon = %s\n', set_loc_lon))
+			file:write(string.format('set_loc_alt = %s\n', set_loc_alt))
+			file:write(string.format('set_pos_pitch = %s\n', set_pos_pitch))
+			file:write(string.format('set_pos_roll = %s\n', set_pos_roll))
+			file:write(string.format('set_pos_heading = %s\n', set_pos_heading))
+			file:write(string.format('set_spd_gnd = %s\n', set_spd_gnd))
+		elseif x == "delete" then
+			-- 
+			target_status = "Deleted" .. " " .. y
+			-- write new empty file
+		end
+		-- Finish writing file
+		file:close()
+	end
 end
 
 ----------------------------------------------------------------------------
@@ -722,6 +783,45 @@ function tlp_build(tlp_wnd, x, y)
 	if imgui.Button("FREEZE", tlp_x, but_2_y) then
 		-- Freeze an aircraft
 		freeze_toggle()
+	end
+	
+	-- Button that save targets to local aircraft folder
+	imgui.TextUnformatted("")
+	imgui.SetCursorPosX(indent + col_x[0])
+	if imgui.Button("Save local", but_1_x - indent / 2, but_1_y) then
+		target("save", "local")
+	end
+	-- Button that load targets from local aircraft folder
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[1])
+	if imgui.Button("Load local", but_1_x - indent / 4, but_1_y) then
+		target("load", "local")
+	end
+	-- Button that delete targets from local aircraft folder
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
+	if imgui.Button("Delete local", but_1_x - indent / 2, but_1_y) then
+		target("delete", "local")
+	end
+	-- Target save/load status
+	imgui.SameLine()
+	imgui.TextUnformatted(target_status)
+	
+	imgui.SetCursorPosX(indent + col_x[0])
+	if imgui.Button("Save global", but_1_x - indent / 2, but_1_y) then
+		target("save", "global")
+	end
+	-- Button that load targets from global aircraft folder
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[1])
+	if imgui.Button("Load global", but_1_x - indent / 4, but_1_y) then
+		target("load", "global")
+	end
+	-- Button that delete targets from global aircraft folder
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
+	if imgui.Button("Delete global", but_1_x - indent / 2, but_1_y) then
+		target("delete", "global")
 	end
 end
 
