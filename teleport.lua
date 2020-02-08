@@ -98,9 +98,6 @@ dataref("acf_loc_vx", "sim/flightmodel/position/local_vx", "writable")
 dataref("acf_loc_vy", "sim/flightmodel/position/local_vy", "writable")
 dataref("acf_loc_vz", "sim/flightmodel/position/local_vz", "writable")
 
--- This is the multiplier on ground speed, for faster travel via double-distance
-dataref("time_gs", "sim/time/ground_speed", "writable")
-
 ----------------------------------------------------------------------------
 -- Local variables
 ----------------------------------------------------------------------------
@@ -113,40 +110,49 @@ local tlp_hide_only_once = 0
 -- Window width
 local tlp_x = 480
 -- Window height
-local tlp_y = 640
+local tlp_y = 680
 
--- Aircraft file name
-local acf_name = string.gsub(AIRCRAFT_FILENAME, ".acf", "")
-
--- Target data read/write status
-local target_status = ""
--- Target data name
-local target_name = ""
-
-----------------------------------------------------------------------------
--- Global variables
-----------------------------------------------------------------------------
 -- Latitude input string variable, world coordinates in degrees
-set_loc_lat_str = ""
+local set_loc_lat_str = ""
 -- Convert latitude string variable to integer
-set_loc_lat = 0
+local set_loc_lat = 0
 -- Longitude input variable, world coordinates in degrees, string
-set_loc_lon_str = ""
+local set_loc_lon_str = ""
 -- Convert longitude string variable to integer
-set_loc_lon = 0
+local set_loc_lon = 0
 
 -- Altitude input variable in meters
-set_loc_alt = 0
+local set_loc_alt = 0
 
 -- Aircraft position input pitch
-set_pos_pitch = 0
+local set_pos_pitch = 0
 -- Aircraft position input roll
-set_pos_roll = 0
+local set_pos_roll = 0
 -- Aircraft position input heading
-set_pos_heading = 0
+local set_pos_heading = 0
 
 -- Aircraft groundspeed input
-set_spd_gnd = 0
+local set_spd_gnd = 0
+
+-- Target files variable and paths
+local target_local_file
+local target_global_file
+-- Paths to target files
+local acf_name = string.gsub(AIRCRAFT_FILENAME, ".acf", "")
+local target_local_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
+local target_global_dir = SCRIPT_DIRECTORY .. "teleport_targets.txt"
+-- File position for target data (at the description end)
+local target_data_start = 325
+-- Target load names in data array
+local target_local_array = {""}
+local target_global_array = {""}
+-- Target select name in array
+local target_local_select = 1
+local target_global_select = 1
+-- Target save data name
+local target_save_name = ""
+-- Target data read/write status
+local target_status = ""
 
 ----------------------------------------------------------------------------
 -- XPLM functions
@@ -208,96 +214,6 @@ end
 function get_spd()
 	-- read current true airspeed
 	set_spd_gnd = acf_spd_air_ms
-end
-
--- Save target to TXT file
-function target(action, state, name)
-	-- Input variables
-	local action = action
-	local state = state
-	local name = name
-	-- Local variables
-	local file
-	local file_local = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
-	local file_global = SCRIPT_DIRECTORY .. "teleport_targets.txt"
-	target_value = {}
-	-- Read target data
-	if action == "load" then
-		-- Load local targets
-		if state == "local" then
-			-- Open file in local directory
-			file = io.open(file_local, "r")
-		-- Load global targets
-		elseif state == "global" then
-			-- Open file in global directory
-			file = io.open(file_global, "r")
-		end
-		-- Load target data to array
-		for i in string.gmatch(file:read(), "%S+") do
-			-- Load string type
-			table.insert(target_value, i)
-		end
-		-- Convert strings to numbers (only targets except name)
-		for i = 1, 7 do
-			target_value[i] = tonumber(target_value[i])
-		end
-		-- Load data from array to target variables and inputs
-		set_loc_lat = target_value[1]
-		set_loc_lat_str = tostring(target_value[1])
-		set_loc_lon = target_value[2]
-		set_loc_lon_str = tostring(target_value[2])
-		set_loc_alt = target_value[3]
-		set_pos_pitch = target_value[4]
-		set_pos_roll = target_value[5]
-		set_pos_heading = target_value[6]
-		set_spd_gnd = target_value[7]
-		-- Log
-		target_status = "Loaded '" .. target_value[8] .. "' from " .. state
-	-- Write target data
-	elseif action == "save" or action == "delete" then
-		-- Select target type
-		if state == "local" then
-			-- Create (or open) and start write file in local directory
-			file = io.open(file_local, "a+")
-		elseif state == "global" then
-			-- Create (or open) and start write file in script directory
-			file = io.open(file_global, "a+")
-		end
-		-- Select action type
-		if action == "save" then
-			-- Log
-			target_status = "Saved" .. " " .. state
-			-- File description
-			--file:write("----------------------------------------------------------------------------\n")
-			--file:write("-- This file contains teleport scripts targets.\n")
-			--file:write("-- If you delete it, you pre saved targets will be cleaned!\n")
-			--file:write("----------------------------------------------------------------------------\n\n")
-			-- Write target variables
-			--file:seek("end")
-			file:write(set_loc_lat)
-			file:write(" ")
-			file:write(set_loc_lon)
-			file:write(" ")
-			file:write(set_loc_alt)
-			file:write(" ")
-			file:write(set_pos_pitch)
-			file:write(" ")
-			file:write(set_pos_roll)
-			file:write(" ")
-			file:write(set_pos_heading)
-			file:write(" ")
-			file:write(set_spd_gnd)
-			file:write(" ")
-			file:write(name)
-			file:write(string.format("\n"))
-		elseif action == "delete" then
-			-- Log
-			target_status = "Deleted" .. " " .. state
-			-- write new empty file
-		end
-	end
-	-- Close file
-	file:close()
 end
 
 ----------------------------------------------------------------------------
@@ -377,6 +293,153 @@ function freeze(lat, lon, alt, pitch, roll, heading, gs)
 		jump(lat, lon, alt)
 		move(pitch, roll, heading)
 		spd_up(gs, heading, pitch)
+	end
+end
+
+----------------------------------------------------------------------------
+-- File functions
+----------------------------------------------------------------------------
+-- Load target file
+function target_load_file(dir)
+	local file
+	-- Try to open in read/write mode
+	file = io.open(dir, "r+")
+	-- If file not found
+	if file == nil then
+		-- Create new file and write description
+		target_new_file(dir)
+		-- Reopen in read/write mode
+		file = io.open(dir, "r+")
+	end
+	return file
+end
+
+-- Create new file with description and add data if needed
+function target_new_file(dir, data)
+	data = data or ""
+	-- Create new one in write mode
+	file = io.open(dir, "w")
+	-- File description
+	file:write("----------------------------------------------------------------------------\n")
+	file:write("-- This file contains teleport scripts targets.\n")
+	file:write("-- If you delete it, your pre saved targets will be cleaned!\n")
+	file:write("----------------------------------------------------------------------------\n")
+	file:write("latitude longitude altitude pitch roll heading GS name\n\n")
+	file:write(data)
+	file:flush()
+	file:close()
+end
+
+-- Find target names
+function target_names(file)
+	local array = {""}
+	-- Go to target read/write position in file
+	file:seek("set", target_data_start)
+	-- Find all targets names
+	for i in file:lines() do
+		for s in string.gmatch(i, "%S+") do
+			table.insert(array, s)
+		end
+	end
+	return array
+end
+
+-- Read/write target from/to TXT file
+function target(action, state, name)
+local name = name
+	-- String to delete
+	local junk
+	-- All data in file
+	local all_data
+	local fixed_data
+	-- File IO
+	local file
+	-- Target data to read/write
+	local target_data = {}
+	-- Choose a directory depending on state
+	if state == "local" then
+		file = target_local_file
+	elseif state == "global" then
+		file = target_global_file
+	end
+	-- Go to target read/write position in file
+	file:seek("set", target_data_start)
+	-- Find target for read or delete
+	if action == "load" or action == "delete" then
+		-- Save file position when start reading new line
+		local line_start = file:seek()
+		-- Read all file lines
+		for i in file:lines() do
+			-- If load target name matches
+			if string.match(i, name) then
+				-- Go to line start position
+				file:seek("set", line_start)
+				-- Break reading lines
+				break
+			-- If load target not found, update new line start position
+			else
+				line_start = file:seek()
+			end
+		end
+	end
+	-- Read target data
+	if action == "load" then
+		-- Load target data to array
+		for i in string.gmatch(file:read(), "%S+") do
+			-- Load string type
+			table.insert(target_data, i)
+		end
+		-- Convert strings to numbers (only targets except name)
+		for i = 1, 7 do
+			target_data[i] = tonumber(target_data[i])
+		end
+		-- Load data from array to target variables and inputs
+		set_loc_lat = target_data[1]
+		set_loc_lon = target_data[2]
+		set_loc_alt = target_data[3]
+		set_pos_pitch = target_data[4]
+		set_pos_roll = target_data[5]
+		set_pos_heading = target_data[6]
+		set_spd_gnd = target_data[7]
+		set_loc_lat_str = tostring(set_loc_lat)
+		set_loc_lon_str = tostring(set_loc_lon)
+		-- Target status log
+		target_status = "Loaded '" .. target_data[8] .. "' from " .. state
+	-- Delete target data
+	elseif action == "delete" then
+		-- Read target deleting string
+		junk = string.format(file:read() .. "\n")
+		-- Go to data start position
+		file:seek("set", target_data_start)
+		-- Read all data
+		all_data = file:read("*a")
+		-- Replace deleting target data string by nothing
+		fixed_data = string.gsub(all_data, junk, "")
+		-- Reopen in write mode and save fixed data
+		file:close()
+		if state == "local" then
+			target_new_file(target_local_dir, fixed_data)
+			target_local_file = target_load_file(target_local_dir)
+		elseif state == "global" then
+			target_new_file(target_global_dir, fixed_data)
+			target_global_file = target_load_file(target_global_dir)
+		end
+		-- Target status log
+		target_status = "Deleted '" .. name .. "' from " .. state
+	-- Write target data
+	elseif action == "save" then
+		-- Go to file end
+		file:seek("end")
+		-- Target data to array
+		target_data = {set_loc_lat, set_loc_lon, set_loc_alt, set_pos_pitch, set_pos_roll, set_pos_heading, set_spd_gnd, name}
+		-- Write array
+		for i = 1, 8 do
+			file:write(string.format("%s ", target_data[i]))
+		end
+		-- Write new line
+		file:write(string.format("\n"))
+		-- Target status log
+		target_status = "Saved '" .. name .. "' to " .. state
 	end
 end
 
@@ -825,48 +888,87 @@ function tlp_build(tlp_wnd, x, y)
 		freeze_toggle()
 	end
 	
-	-- Button that save targets to local aircraft folder
+	-- Create input string for writing target save name
 	imgui.TextUnformatted("")
+    local changed, newVal = imgui.InputText("save name", target_save_name, 40) -- if string inputs label is the same, then the variables overwrite each other
+    -- If input value is changed by user
+    if changed then
+        target_save_name = newVal
+    end
+	
+	-- Button that save targets to local aircraft folder
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save local", but_1_x - indent / 2, but_1_y) then
-		target("save", "local", target_name)
+		target("save", "local", target_save_name)
+		target_save_name = ""
 	end
 	-- Button that load targets from local aircraft folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("Load local", but_1_x - indent / 4, but_1_y) then
-		target("load", "local")
+		target("load", "local", target_local_array[target_local_select])
+		target_local_select = 1
 	end
 	-- Button that delete targets from local aircraft folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("Delete local", but_1_x - indent / 2, but_1_y) then
-		target("delete", "local")
+		target("delete", "local", target_local_array[target_local_select])
+		target_local_select = 1
 	end
 	
+	-- Button that save targets to global script folder
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save global", but_1_x - indent / 2, but_1_y) then
-		target("save", "global")
+		target("save", "global", target_save_name)
+		target_save_name = ""
 	end
-	-- Button that load targets from global aircraft folder
+	-- Button that load targets from global script folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("Load global", but_1_x - indent / 4, but_1_y) then
-		target("load", "global")
+		target("load", "global", target_global_array[target_global_select])
+		target_global_select = 1
 	end
-	-- Button that delete targets from global aircraft folder
+	-- Button that delete targets from global script folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("Delete global", but_1_x - indent / 2, but_1_y) then
-		target("delete", "global")
+		target("delete", "global", target_global_array[target_global_select])
+		target_global_select = 1
 	end
 	
-	-- Create input string for writing target data
-    local changed, newVal = imgui.InputText("name", target_name, 40) -- if string inputs label is the same, then the variables overwrite each other
-    -- If input value is changed by user
-    if changed then
-        target_name = newVal
-    end
+	-- Get target names to array from local file
+	target_local_array = target_names(target_local_file)
+	
+	-- Combobox for local targets
+	if imgui.BeginCombo("load local", target_local_array[target_local_select]) then
+		-- Select only names in array
+		for i = 1, #target_local_array, 8 do
+			-- Add selectable target to combobox
+			if imgui.Selectable(target_local_array[i], target_local_select == i) then
+				-- If new target was selected, change current
+				target_local_select = i
+			end
+		end
+		imgui.EndCombo()
+	end
+	
+	-- Get target names to array from global file
+	target_global_array = target_names(target_global_file)
+	
+	-- Combobox for global targets
+	if imgui.BeginCombo("load global", target_global_array[target_global_select]) then
+		-- Select only names in array
+		for i = 1, #target_global_array, 8 do
+			-- Add selectable target to combobox
+			if imgui.Selectable(target_global_array[i], target_global_select == i) then
+				-- If new target was selected, change current
+				target_global_select = i
+			end
+		end
+		imgui.EndCombo()
+	end
 	
 	-- Target save/load status
 	imgui.TextUnformatted(target_status)
@@ -877,6 +979,9 @@ end
 ----------------------------------------------------------------------------
 -- Show imgui floating window
 function tlp_show()
+	-- Load targets data files
+	target_local_file = target_load_file(target_local_dir)
+	target_global_file = target_load_file(target_global_dir)
 	-- Create floating window
 	tlp_wnd = float_wnd_create(tlp_x, tlp_y, 1, true)
 	-- Set floating window title
@@ -891,6 +996,9 @@ function tlp_hide()
     if tlp_wnd then
 		-- Destroy window
         float_wnd_destroy(tlp_wnd)
+		-- Close target data files
+		target_local_file:close()
+		target_global_file:close()
     end
 end
 
@@ -928,14 +1036,10 @@ function freeze_toggle()
 		get_alt()
 		get_pos()
 		get_spd()
-		-- Turn off ground speed
-		time_gs = 0
 	-- if not
 	else
 		-- Return aircraft target speed
 		spd_up(set_spd_gnd, set_pos_heading, set_pos_pitch)
-		-- Turn on ground speed
-		time_gs = 1
 	end
 end
 
@@ -966,8 +1070,6 @@ get_spd()
 
 -- Freeze event
 function freeze_event()
-	freeze(null, null, set_loc_alt, set_pos_pitch, set_pos_roll, set_pos_heading, 0)
+	freeze(set_loc_lat, set_loc_lon, set_loc_alt, set_pos_pitch, set_pos_roll, set_pos_heading, 0)
 end
 do_every_frame("freeze_event()")
--- Fix ground speed time if aircraft or flight was restarted during freeze function
-time_gs = 1
