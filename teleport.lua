@@ -899,43 +899,73 @@ function tlp_build(tlp_wnd, x, y)
 	-- Button that save targets to local aircraft folder
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save local", but_1_x - indent / 2, but_1_y) then
-		target("save", "local", target_save_name)
-		target_save_name = ""
+		-- Check first that the target is named
+		if target_save_name == "" then
+			target_status = "Error! Empty target name!"
+		else
+			target("save", "local", target_save_name)
+			target_save_name = ""
+		end
 	end
 	-- Button that load targets from local aircraft folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("Load local", but_1_x - indent / 4, but_1_y) then
-		target("load", "local", target_local_array[target_local_select])
-		target_local_select = 1
+		-- Check first that the target is selected
+		if target_local_select == 1 then
+			target_status = "Error! Select the target!"
+		else
+			target("load", "local", target_local_array[target_local_select])
+			target_local_select = 1
+		end
 	end
 	-- Button that delete targets from local aircraft folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("Delete local", but_1_x - indent / 2, but_1_y) then
-		target("delete", "local", target_local_array[target_local_select])
-		target_local_select = 1
+		-- Check first that the target is selected
+		if target_local_select == 1 then
+			target_status = "Error! Select the target!"
+		else
+			target("delete", "local", target_local_array[target_local_select])
+			target_local_select = 1
+		end
 	end
 	
 	-- Button that save targets to global script folder
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save global", but_1_x - indent / 2, but_1_y) then
-		target("save", "global", target_save_name)
-		target_save_name = ""
+		-- Check first that the target is named
+		if target_save_name == "" then
+			target_status = "Error! Empty target name!"
+		else
+			target("save", "global", target_save_name)
+			target_save_name = ""
+		end
 	end
 	-- Button that load targets from global script folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("Load global", but_1_x - indent / 4, but_1_y) then
-		target("load", "global", target_global_array[target_global_select])
-		target_global_select = 1
+		-- Check first that the target is selected
+		if target_global_select == 1 then
+			target_status = "Error! Select the target!"
+		else
+			target("load", "global", target_global_array[target_global_select])
+			target_global_select = 1
+		end
 	end
 	-- Button that delete targets from global script folder
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("Delete global", but_1_x - indent / 2, but_1_y) then
-		target("delete", "global", target_global_array[target_global_select])
-		target_global_select = 1
+		-- Check first that the target is selected
+		if target_global_select == 1 then
+			target_status = "Error! Select the target!"
+		else
+			target("delete", "global", target_global_array[target_global_select])
+			target_global_select = 1
+		end
 	end
 	
 	-- Get target names to array from local file
