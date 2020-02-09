@@ -110,7 +110,7 @@ local tlp_hide_only_once = 0
 -- Window width
 local tlp_x = 480
 -- Window height
-local tlp_y = 635
+local tlp_y = 585
 
 -- Latitude input string variable, world coordinates in degrees
 local set_loc_lat_str = ""
@@ -502,6 +502,13 @@ function tlp_build(tlp_wnd, x, y)
 	else
 		error_lon = 0xFFFFFFFF
 	end
+	-- Set freeze status color
+	local freeze_color
+	if freeze_on then
+		freeze_color = 0xFFFFD37A
+	else
+		freeze_color = 0xFFFFFFFF
+	end
 	
 	-- Type 2 title for table columns
 	imgui.PushStyleColor(imgui.constant.Col.Text, title_2_color)
@@ -845,51 +852,7 @@ function tlp_build(tlp_wnd, x, y)
 		get_spd()
 	end
 	
-	-- Button that teleports you to all input targets
-	imgui.TextUnformatted("")
-	if imgui.Button("TELEPORT", tlp_x, but_2_y) then
-		-- Teleport aircraft
-		jump(set_loc_lat, set_loc_lon, set_loc_alt)
-		move(set_pos_pitch, set_pos_roll, set_pos_heading)
-		spd_up(set_spd_gnd, set_pos_heading, set_pos_pitch)
-	end
-	-- Button that teleport to target location
-	imgui.SetCursorPosX(indent + col_x[0])
-	if imgui.Button("to location", but_1_x - indent / 2, but_1_y) then
-		-- Teleport to target location
-		jump(set_loc_lat, set_loc_lon)
-	end
-	-- Button that teleport to target altitude
-	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[1])
-	if imgui.Button("to altitude", but_1_x - indent / 4, but_1_y) then
-		-- Teleport to target altitude
-		jump(null, null, set_loc_alt)
-	end
-	-- Button that teleport to target position
-	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
-	if imgui.Button("to position", but_1_x - indent / 2, but_1_y) then
-		-- Teleport to target position
-		move(set_pos_pitch, set_pos_roll, set_pos_heading)
-	end
-	-- Button that speed up to target airspeed
-	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
-	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
-		-- Speed up aircraft
-		spd_up(set_spd_gnd, acf_pos_heading, acf_pos_pitch)
-	end
-	
-	-- Button that freeze aircraft
-	imgui.TextUnformatted("")
-	if imgui.Button("FREEZE", tlp_x, but_2_y) then
-		-- Freeze an aircraft
-		freeze_toggle()
-	end
-	
 	-- Create input string for writing target save name
-	imgui.TextUnformatted("")
 	imgui.PushItemWidth(tlp_x - 44)
     local changed, newVal = imgui.InputText("name", target_save_name, 40) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
@@ -1010,6 +973,50 @@ function tlp_build(tlp_wnd, x, y)
 	
 	-- Target save/load status
 	imgui.TextUnformatted(target_status)
+	
+	-- Set color for freeze indicated status
+	imgui.PushStyleColor(imgui.constant.Col.Text, freeze_color)
+	-- Button that freeze aircraft
+	if imgui.Button("FREEZE", tlp_x, but_2_y) then
+		-- Freeze an aircraft
+		freeze_toggle()
+	end
+	imgui.PopStyleColor()
+	
+	-- Button that teleports you to all input targets
+	if imgui.Button("TELEPORT", tlp_x, but_2_y) then
+		-- Teleport aircraft
+		jump(set_loc_lat, set_loc_lon, set_loc_alt)
+		move(set_pos_pitch, set_pos_roll, set_pos_heading)
+		spd_up(set_spd_gnd, set_pos_heading, set_pos_pitch)
+	end
+	-- Button that teleport to target location
+	imgui.SetCursorPosX(indent + col_x[0])
+	if imgui.Button("to location", but_1_x - indent / 2, but_1_y) then
+		-- Teleport to target location
+		jump(set_loc_lat, set_loc_lon)
+	end
+	-- Button that teleport to target altitude
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[1])
+	if imgui.Button("to altitude", but_1_x - indent / 4, but_1_y) then
+		-- Teleport to target altitude
+		jump(null, null, set_loc_alt)
+	end
+	-- Button that teleport to target position
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
+	if imgui.Button("to position", but_1_x - indent / 2, but_1_y) then
+		-- Teleport to target position
+		move(set_pos_pitch, set_pos_roll, set_pos_heading)
+	end
+	-- Button that speed up to target airspeed
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
+	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
+		-- Speed up aircraft
+		spd_up(set_spd_gnd, acf_pos_heading, acf_pos_pitch)
+	end
 end
 
 ----------------------------------------------------------------------------
