@@ -2,8 +2,8 @@
 ----------------------------------------------------------------------------
 Script:   Teleport
 Author:   shryft
-Version:  1.0
-Build:    2020-02-03
+Version:  1.2.1
+Build:    2020-02-09
 Description:
 The script gives ability to move aircraft at any location,
 set altitude, position and speed.
@@ -113,46 +113,51 @@ local tlp_x = 480
 local tlp_y = 585
 
 -- Latitude input string variable, world coordinates in degrees
-local set_loc_lat_str = ""
+local trg_loc_lat_str = ""
 -- Convert latitude string variable to integer
-local set_loc_lat = 0
+local trg_loc_lat = 0
 -- Longitude input variable, world coordinates in degrees, string
-local set_loc_lon_str = ""
+local trg_loc_lon_str = ""
 -- Convert longitude string variable to integer
-local set_loc_lon = 0
+local trg_loc_lon = 0
 
 -- Altitude input variable in meters
-local set_loc_alt = 0
+local trg_loc_alt = 0
 
 -- Aircraft position input pitch
-local set_pos_pitch = 0
+local trg_pos_pitch = 0
 -- Aircraft position input roll
-local set_pos_roll = 0
+local trg_pos_roll = 0
 -- Aircraft position input heading
-local set_pos_heading = 0
+local trg_pos_hdng = 0
 
 -- Aircraft groundspeed input
-local set_spd_gnd = 0
+local trg_spd_gnd = 0
 
 -- Target files variable and paths
-local target_local_file
-local target_global_file
+local trg_local_file
+local trg_global_file
+
 -- Paths to target files
 local acf_name = string.gsub(AIRCRAFT_FILENAME, ".acf", "")
-local target_local_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
-local target_global_dir = SCRIPT_DIRECTORY .. "teleport_targets.txt"
+local trg_local_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
+local trg_global_dir = SCRIPT_DIRECTORY .. "teleport_targets.txt"
+
 -- File position for target data (at the description end)
-local target_data_start = 325
+local trg_data_start = 325
+
 -- Target load names in data array
-local target_local_array = {""}
-local target_global_array = {""}
+local trg_local_array = {""}
+local trg_global_array = {""}
 -- Target select name in array
-local target_local_select = 1
-local target_global_select = 1
+local trg_local_select = 1
+local trg_global_select = 1
+
 -- Target save data name
-local target_save_name = ""
+local trg_save_name = ""
+
 -- Target data read/write status
-local target_status = ""
+local trg_status = ""
 
 ----------------------------------------------------------------------------
 -- XPLM functions
@@ -187,33 +192,33 @@ end
 -- Target to current location
 function get_loc()
 	-- Latitude input string variable, world coordinates in degrees
-	set_loc_lat_str = string.format("%.6f", LATITUDE)
+	trg_loc_lat_str = string.format("%.6f", LATITUDE)
 	-- Convert latitude string variable to integer
-	set_loc_lat = tonumber(set_loc_lat_str)
+	trg_loc_lat = tonumber(trg_loc_lat_str)
 	-- Longitude input variable, world coordinates in degrees, string
-	set_loc_lon_str = string.format("%.6f", LONGITUDE)
+	trg_loc_lon_str = string.format("%.6f", LONGITUDE)
 	-- Convert longitude string variable to integer
-	set_loc_lon = tonumber(set_loc_lon_str)
+	trg_loc_lon = tonumber(trg_loc_lon_str)
 end
 
 -- Target to current altitude
 function get_alt()
 	-- read current alt
-	set_loc_alt = ELEVATION
+	trg_loc_alt = ELEVATION
 end
 
 -- Target to current position
 function get_pos()
 	-- read current aircraft position
-	set_pos_pitch = acf_pos_pitch
-	set_pos_roll = acf_pos_roll
-	set_pos_heading = acf_pos_heading
+	trg_pos_pitch = acf_pos_pitch
+	trg_pos_roll = acf_pos_roll
+	trg_pos_hdng = acf_pos_heading
 end
 
 -- Target to current airspeed
 function get_spd()
 	-- read current true airspeed
-	set_spd_gnd = acf_spd_air_ms
+	trg_spd_gnd = acf_spd_air_ms
 end
 
 ----------------------------------------------------------------------------
@@ -221,10 +226,6 @@ end
 ----------------------------------------------------------------------------
 -- Jump to target world location from input values
 function jump(lat, lon, alt)
-	-- Create input variables
-	local lat = lat
-	local lon = lon
-	local alt = alt
 	-- Check latitude value is correct
 	if lat == nil or lat < -90 or lat > 90 then
 		-- if not, apply current latitude location
@@ -245,10 +246,6 @@ end
 
 -- Move airtcraft position
 function move(pitch, roll, heading)
-	-- Create input variables
-	local pitch = pitch
-	local roll = roll
-	local heading = heading
 	-- Move aircraft (camera) to input position via datarefs
 	acf_pos_pitch = pitch
 	acf_pos_roll = roll
@@ -266,8 +263,6 @@ end
 
 -- Speed up aircraft from target position
 function spd_up(speed, heading, pitch)
-	-- Create input variables
-	local speed = speed
 	-- Convert input degrees to radians
 	local heading = math.rad(heading)
 	local pitch = math.rad(pitch)
@@ -279,15 +274,7 @@ end
 
 -- Freeze an aircraft in space except time
 function freeze(lat, lon, alt, pitch, roll, heading, gs)
-	-- Input variables
-	local lat = lat
-	local lon = lon
-	local alt = alt
-	local pitch = pitch
-	local roll = roll
-	local heading = heading
-	local gs = gs
-	-- If true
+	-- If enabled
 	if freeze_on then
 		-- Teleport to target every time except location
 		jump(lat, lon, alt)
@@ -300,14 +287,14 @@ end
 -- File functions
 ----------------------------------------------------------------------------
 -- Load target file
-function target_load_file(dir)
+function trg_load_file(dir)
 	local file
 	-- Try to open in read/write mode
 	file = io.open(dir, "r+")
 	-- If file not found
 	if file == nil then
 		-- Create new file and write description
-		target_new_file(dir)
+		trg_new_file(dir)
 		-- Reopen in read/write mode
 		file = io.open(dir, "r+")
 	end
@@ -315,7 +302,7 @@ function target_load_file(dir)
 end
 
 -- Create new file with description and add data if needed
-function target_new_file(dir, data)
+function trg_new_file(dir, data)
 	data = data or ""
 	-- Create new one in write mode
 	file = io.open(dir, "w")
@@ -331,10 +318,10 @@ function target_new_file(dir, data)
 end
 
 -- Find target names
-function target_names(file)
+function trg_names(file)
 	local array = {""}
 	-- Go to target read/write position in file
-	file:seek("set", target_data_start)
+	file:seek("set", trg_data_start)
 	-- Find all targets names
 	for i in file:lines() do
 		for s in string.gmatch(i, "%S+") do
@@ -346,7 +333,6 @@ end
 
 -- Read/write target from/to TXT file
 function target(action, state, name)
-local name = name
 	-- String to delete
 	local junk
 	-- All data in file
@@ -355,15 +341,15 @@ local name = name
 	-- File IO
 	local file
 	-- Target data to read/write
-	local target_data = {}
+	local trg_data = {}
 	-- Choose a directory depending on state
 	if state == "local" then
-		file = target_local_file
+		file = trg_local_file
 	elseif state == "global" then
-		file = target_global_file
+		file = trg_global_file
 	end
 	-- Go to target read/write position in file
-	file:seek("set", target_data_start)
+	file:seek("set", trg_data_start)
 	-- Find target for read or delete
 	if action == "load" or action == "delete" then
 		-- Save file position when start reading new line
@@ -387,30 +373,30 @@ local name = name
 		-- Load target data to array
 		for i in string.gmatch(file:read(), "%S+") do
 			-- Load string type
-			table.insert(target_data, i)
+			table.insert(trg_data, i)
 		end
 		-- Convert strings to numbers (only targets except name)
 		for i = 1, 7 do
-			target_data[i] = tonumber(target_data[i])
+			trg_data[i] = tonumber(trg_data[i])
 		end
 		-- Load data from array to target variables and inputs
-		set_loc_lat = target_data[1]
-		set_loc_lon = target_data[2]
-		set_loc_alt = target_data[3]
-		set_pos_pitch = target_data[4]
-		set_pos_roll = target_data[5]
-		set_pos_heading = target_data[6]
-		set_spd_gnd = target_data[7]
-		set_loc_lat_str = tostring(set_loc_lat)
-		set_loc_lon_str = tostring(set_loc_lon)
+		trg_loc_lat = trg_data[1]
+		trg_loc_lon = trg_data[2]
+		trg_loc_alt = trg_data[3]
+		trg_pos_pitch = trg_data[4]
+		trg_pos_roll = trg_data[5]
+		trg_pos_hdng = trg_data[6]
+		trg_spd_gnd = trg_data[7]
+		trg_loc_lat_str = tostring(trg_loc_lat)
+		trg_loc_lon_str = tostring(trg_loc_lon)
 		-- Target status log
-		target_status = "Loaded '" .. target_data[8] .. "' from " .. state
+		trg_status = "Loaded '" .. trg_data[8] .. "' from " .. state
 	-- Delete target data
 	elseif action == "delete" then
 		-- Read target deleting string
 		junk = string.format(file:read() .. "\n")
 		-- Go to data start position
-		file:seek("set", target_data_start)
+		file:seek("set", trg_data_start)
 		-- Read all data
 		all_data = file:read("*a")
 		-- Replace deleting target data string by nothing
@@ -418,28 +404,28 @@ local name = name
 		-- Reopen in write mode and save fixed data
 		file:close()
 		if state == "local" then
-			target_new_file(target_local_dir, fixed_data)
-			target_local_file = target_load_file(target_local_dir)
+			trg_new_file(trg_local_dir, fixed_data)
+			trg_local_file = trg_load_file(trg_local_dir)
 		elseif state == "global" then
-			target_new_file(target_global_dir, fixed_data)
-			target_global_file = target_load_file(target_global_dir)
+			trg_new_file(trg_global_dir, fixed_data)
+			trg_global_file = trg_load_file(trg_global_dir)
 		end
 		-- Target status log
-		target_status = "Deleted '" .. name .. "' from " .. state
+		trg_status = "Deleted '" .. name .. "' from " .. state
 	-- Write target data
 	elseif action == "save" then
 		-- Go to file end
 		file:seek("end")
 		-- Target data to array
-		target_data = {set_loc_lat, set_loc_lon, set_loc_alt, set_pos_pitch, set_pos_roll, set_pos_heading, set_spd_gnd, name}
+		trg_data = {trg_loc_lat, trg_loc_lon, trg_loc_alt, trg_pos_pitch, trg_pos_roll, trg_pos_hdng, trg_spd_gnd, name}
 		-- Write array
 		for i = 1, 8 do
-			file:write(string.format("%s ", target_data[i]))
+			file:write(string.format("%s ", trg_data[i]))
 		end
 		-- Write new line
 		file:write(string.format("\n"))
 		-- Target status log
-		target_status = "Saved '" .. name .. "' to " .. state
+		trg_status = "Saved '" .. name .. "' to " .. state
 	end
 end
 
@@ -490,14 +476,14 @@ function tlp_build(tlp_wnd, x, y)
 	-- Set error message color
 	-- Wrong latitude
 	local error_lat
-	if set_loc_lat == nil or set_loc_lat < -90 or set_loc_lat > 90 then
+	if trg_loc_lat == nil or trg_loc_lat < -90 or trg_loc_lat > 90 then
 		error_lat = 0xFF0000FF
 	else
 		error_lat = 0xFFFFFFFF
 	end
 	-- Wrong longitude
 	local error_lon
-	if set_loc_lon == nil or set_loc_lon < -180 or set_loc_lon > 180 then
+	if trg_loc_lon == nil or trg_loc_lon < -180 or trg_loc_lon > 180 then
 		error_lon = 0xFF0000FF
 	else
 		error_lon = 0xFFFFFFFF
@@ -550,16 +536,16 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.PushItemWidth(col_size[3])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lat)
 	-- Create input string for latitude
-    local changed, newVal = imgui.InputText("", set_loc_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
+    local changed, newVal = imgui.InputText("", trg_loc_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
     if changed then
-        set_loc_lat_str = newVal
+        trg_loc_lat_str = newVal
 		-- Check for an empty value
-		if set_loc_lat_str == "" then
-			set_loc_lat = nil
+		if trg_loc_lat_str == "" then
+			trg_loc_lat = nil
 		else
 			-- if not, convert to integer
-			set_loc_lat = tonumber(set_loc_lat_str)
+			trg_loc_lat = tonumber(trg_loc_lat_str)
 		end
     end
 	imgui.PopStyleColor()
@@ -584,16 +570,16 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.PushItemWidth(col_size[3])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lon)
 	-- Create input string for longitude
-    local changed, newVal = imgui.InputText(" ", set_loc_lon_str, 10)
+    local changed, newVal = imgui.InputText(" ", trg_loc_lon_str, 10)
 	-- If input value is changed by user
     if changed then
-        set_loc_lon_str = newVal
+        trg_loc_lon_str = newVal
 		-- Check for an empty value
-		if set_loc_lon_str == "" then
-			set_loc_lon = nil
+		if trg_loc_lon_str == "" then
+			trg_loc_lon = nil
 		else
 			-- if not, convert to integer
-			set_loc_lon = tonumber(set_loc_lon_str)
+			trg_loc_lon = tonumber(trg_loc_lon_str)
 		end
     end
 	imgui.PopStyleColor()
@@ -623,9 +609,9 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Target input for altitude above sea
-	local changed, newInt = imgui.InputInt("  ", set_loc_alt)
+	local changed, newInt = imgui.InputInt("  ", trg_loc_alt)
 	if changed then
-		set_loc_alt = newInt
+		trg_loc_alt = newInt
 	end
 	imgui.PopItemWidth()
 	
@@ -680,13 +666,13 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("   ", set_pos_pitch)
+	local changed, newInt = imgui.InputInt("   ", trg_pos_pitch)
 	if changed then
 		-- set limit to max and min pitch angle according to x-plane dataref
 		if newInt < -90 or newInt > 90 then
-			set_pos_pitch = set_pos_pitch
+			trg_pos_pitch = trg_pos_pitch
 		else
-			set_pos_pitch = newInt
+			trg_pos_pitch = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -709,15 +695,15 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("    ", set_pos_roll)
+	local changed, newInt = imgui.InputInt("    ", trg_pos_roll)
 	if changed then
 		-- create loop for roll target value
 		if newInt < -180 then
-			set_pos_roll = set_pos_roll + 359
+			trg_pos_roll = trg_pos_roll + 359
 		elseif newInt > 180 then
-			set_pos_roll = set_pos_roll - 359
+			trg_pos_roll = trg_pos_roll - 359
 		else
-			set_pos_roll = newInt
+			trg_pos_roll = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -740,15 +726,15 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("     ", set_pos_heading)
+	local changed, newInt = imgui.InputInt("     ", trg_pos_hdng)
 	if changed then
 		-- create loop for heading target value
 		if newInt < 0 then
-			set_pos_heading = newInt + 360
+			trg_pos_hdng = newInt + 360
 		elseif newInt >= 360 then
-			set_pos_heading = newInt - 360
+			trg_pos_hdng = newInt - 360
 		else
-			set_pos_heading = newInt
+			trg_pos_hdng = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -790,13 +776,13 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("      ", set_spd_gnd)
+	local changed, newInt = imgui.InputInt("      ", trg_spd_gnd)
 	if changed then
 		-- limit speed
 		if newInt < 0 then
-			set_spd_gnd = 0
+			trg_spd_gnd = 0
 		else
-			set_spd_gnd = newInt
+			trg_spd_gnd = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -854,40 +840,40 @@ function tlp_build(tlp_wnd, x, y)
 	
 	-- Create input string for writing target save name
 	imgui.PushItemWidth(tlp_x - 44)
-    local changed, newVal = imgui.InputText("name", target_save_name, 40) -- if string inputs label is the same, then the variables overwrite each other
+    local changed, newVal = imgui.InputText("name", trg_save_name, 40) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
     if changed then
-        target_save_name = newVal
+        trg_save_name = newVal
     end	
 	imgui.PopItemWidth()
 	
 	-- Get target names to array from local file
-	target_local_array = target_names(target_local_file)
+	trg_local_array = trg_names(trg_local_file)
 	-- Combobox for local targets
 	imgui.PushItemWidth(col_x[2] - 45)
-	if imgui.BeginCombo("local", target_local_array[target_local_select]) then
+	if imgui.BeginCombo("local", trg_local_array[trg_local_select]) then
 		-- Select only names in array
-		for i = 1, #target_local_array, 8 do
+		for i = 1, #trg_local_array, 8 do
 			-- Add selectable target to combobox
-			if imgui.Selectable(target_local_array[i], target_local_select == i) then
+			if imgui.Selectable(trg_local_array[i], trg_local_select == i) then
 				-- If new target was selected, change current
-				target_local_select = i
+				trg_local_select = i
 			end
 		end
 		imgui.EndCombo()
 	end
 	
 	-- Get target names to array from global file
-	target_global_array = target_names(target_global_file)
+	trg_global_array = trg_names(trg_global_file)
 	-- Combobox for global targets
 	imgui.SameLine()
-	if imgui.BeginCombo("global", target_global_array[target_global_select]) then
+	if imgui.BeginCombo("global", trg_global_array[trg_global_select]) then
 		-- Select only names in array
-		for i = 1, #target_global_array, 8 do
+		for i = 1, #trg_global_array, 8 do
 			-- Add selectable target to combobox
-			if imgui.Selectable(target_global_array[i], target_global_select == i) then
+			if imgui.Selectable(trg_global_array[i], trg_global_select == i) then
 				-- If new target was selected, change current
-				target_global_select = i
+				trg_global_select = i
 			end
 		end
 		imgui.EndCombo()
@@ -898,11 +884,11 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is named
-		if target_save_name == "" then
-			target_status = "Error! Empty target name!"
+		if trg_save_name == "" then
+			trg_status = "Error! Empty target name!"
 		else
-			target("save", "local", target_save_name)
-			target_save_name = ""
+			target("save", "local", trg_save_name)
+			trg_save_name = ""
 		end
 	end
 	
@@ -911,11 +897,11 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[1] / 2)
 	if imgui.Button("Load", but_1_x - indent / 4, but_1_y) then
 		-- Check first that the target is selected
-		if target_local_select == 1 then
-			target_status = "Error! Select the local target to load!"
+		if trg_local_select == 1 then
+			trg_status = "Error! Select the local target to load!"
 		else
-			target("load", "local", target_local_array[target_local_select])
-			target_local_select = 1
+			target("load", "local", trg_local_array[trg_local_select])
+			trg_local_select = 1
 		end
 	end
 	
@@ -924,11 +910,11 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[2] / 4 * 3 + indent / 4)
 	if imgui.Button("Delete", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is selected
-		if target_local_select == 1 then
-			target_status = "Error! Select the local target to delete!"
+		if trg_local_select == 1 then
+			trg_status = "Error! Select the local target to delete!"
 		else
-			target("delete", "local", target_local_array[target_local_select])
-			target_local_select = 1
+			target("delete", "local", trg_local_array[trg_local_select])
+			trg_local_select = 1
 		end
 	end
 	
@@ -937,11 +923,11 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button(" Save ", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is named
-		if target_save_name == "" then
-			target_status = "Error! Empty target name!"
+		if trg_save_name == "" then
+			trg_status = "Error! Empty target name!"
 		else
-			target("save", "global", target_save_name)
-			target_save_name = ""
+			target("save", "global", trg_save_name)
+			trg_save_name = ""
 		end
 	end
 	
@@ -950,11 +936,11 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3] / 6 * 5 + indent / 4)
 	if imgui.Button(" Load ", but_1_x - indent / 4, but_1_y) then
 		-- Check first that the target is selected
-		if target_global_select == 1 then
-			target_status = "Error! Select the global target to load!"
+		if trg_global_select == 1 then
+			trg_status = "Error! Select the global target to load!"
 		else
-			target("load", "global", target_global_array[target_global_select])
-			target_global_select = 1
+			target("load", "global", trg_global_array[trg_global_select])
+			trg_global_select = 1
 		end
 	end
 	
@@ -963,16 +949,16 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3] / 6 * 7 + indent / 2)
 	if imgui.Button("Delete ", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is selected
-		if target_global_select == 1 then
-			target_status = "Error! Select the global target to delete!"
+		if trg_global_select == 1 then
+			trg_status = "Error! Select the global target to delete!"
 		else
-			target("delete", "global", target_global_array[target_global_select])
-			target_global_select = 1
+			target("delete", "global", trg_global_array[trg_global_select])
+			trg_global_select = 1
 		end
 	end
 	
 	-- Target save/load status
-	imgui.TextUnformatted(target_status)
+	imgui.TextUnformatted(trg_status)
 	
 	-- Set color for freeze indicated status
 	imgui.PushStyleColor(imgui.constant.Col.Text, freeze_color)
@@ -986,36 +972,36 @@ function tlp_build(tlp_wnd, x, y)
 	-- Button that teleports you to all input targets
 	if imgui.Button("TELEPORT", tlp_x, but_2_y) then
 		-- Teleport aircraft
-		jump(set_loc_lat, set_loc_lon, set_loc_alt)
-		move(set_pos_pitch, set_pos_roll, set_pos_heading)
-		spd_up(set_spd_gnd, set_pos_heading, set_pos_pitch)
+		jump(trg_loc_lat, trg_loc_lon, trg_loc_alt)
+		move(trg_pos_pitch, trg_pos_roll, trg_pos_hdng)
+		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_pitch)
 	end
 	-- Button that teleport to target location
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("to location", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target location
-		jump(set_loc_lat, set_loc_lon)
+		jump(trg_loc_lat, trg_loc_lon)
 	end
 	-- Button that teleport to target altitude
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("to altitude", but_1_x - indent / 4, but_1_y) then
 		-- Teleport to target altitude
-		jump(null, null, set_loc_alt)
+		jump(null, null, trg_loc_alt)
 	end
 	-- Button that teleport to target position
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("to position", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target position
-		move(set_pos_pitch, set_pos_roll, set_pos_heading)
+		move(trg_pos_pitch, trg_pos_roll, trg_pos_hdng)
 	end
 	-- Button that speed up to target airspeed
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
 	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
 		-- Speed up aircraft
-		spd_up(set_spd_gnd, acf_pos_heading, acf_pos_pitch)
+		spd_up(trg_spd_gnd, acf_pos_heading, acf_pos_pitch)
 	end
 end
 
@@ -1025,8 +1011,8 @@ end
 -- Show imgui floating window
 function tlp_show()
 	-- Load targets data files
-	target_local_file = target_load_file(target_local_dir)
-	target_global_file = target_load_file(target_global_dir)
+	trg_local_file = trg_load_file(trg_local_dir)
+	trg_global_file = trg_load_file(trg_global_dir)
 	-- Create floating window
 	tlp_wnd = float_wnd_create(tlp_x, tlp_y, 1, true)
 	-- Set floating window title
@@ -1042,8 +1028,8 @@ function tlp_hide()
 		-- Destroy window
         float_wnd_destroy(tlp_wnd)
 		-- Close target data files
-		target_local_file:close()
-		target_global_file:close()
+		trg_local_file:close()
+		trg_global_file:close()
     end
 end
 
@@ -1084,7 +1070,7 @@ function freeze_toggle()
 	-- if not
 	else
 		-- Return aircraft target speed
-		spd_up(set_spd_gnd, set_pos_heading, set_pos_pitch)
+		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_pitch)
 	end
 end
 
@@ -1115,6 +1101,6 @@ get_spd()
 
 -- Freeze event
 function freeze_event()
-	freeze(set_loc_lat, set_loc_lon, set_loc_alt, set_pos_pitch, set_pos_roll, set_pos_heading, 0)
+	freeze(trg_loc_lat, trg_loc_lon, trg_loc_alt, trg_pos_pitch, trg_pos_roll, trg_pos_hdng, 0)
 end
 do_every_frame("freeze_event()")
