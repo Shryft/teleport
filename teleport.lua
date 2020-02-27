@@ -2,8 +2,8 @@
 ----------------------------------------------------------------------------
 Script:   Teleport
 Author:   shryft
-Version:  1.2.1
-Build:    2020-02-09
+Version:  1.3
+Build:    2020-02-27
 Description:
 The script gives ability to move aircraft at any location,
 set altitude, position and speed.
@@ -77,26 +77,27 @@ dataref("acf_spd_air_ms", "sim/flightmodel/position/true_airspeed", "readonly")
 ----------------------------------------------------------------------------
 -- DataRefs writable
 ----------------------------------------------------------------------------
+-- To avoid conficts with other scripts and have maximum performance we use XPLMDateref
 -- Aircraft location in OpenGL coordinates
-dataref("acf_loc_x", "sim/flightmodel/position/local_x", "writable")
-dataref("acf_loc_y", "sim/flightmodel/position/local_y", "writable")
-dataref("acf_loc_z", "sim/flightmodel/position/local_z", "writable")
+tlp_acf_loc_x	= XPLMFindDataRef("sim/flightmodel/position/local_x")
+tlp_acf_loc_y	= XPLMFindDataRef("sim/flightmodel/position/local_y")
+tlp_acf_loc_z	= XPLMFindDataRef("sim/flightmodel/position/local_z")
 
 -- Aircraft position in OpenGL coordinates
 -- The pitch relative to the plane normal to the Y axis in degrees
-dataref("acf_pos_pitch", "sim/flightmodel/position/theta", "writable")
+tlp_acf_pos_pitch	= XPLMFindDataRef("sim/flightmodel/position/theta")
 -- The roll of the aircraft in degrees
-dataref("acf_pos_roll", "sim/flightmodel/position/phi", "writable")
+tlp_acf_pos_roll	= XPLMFindDataRef("sim/flightmodel/position/phi")
 -- The true heading of the aircraft in degrees from the Z axis
-dataref("acf_pos_heading", "sim/flightmodel/position/psi", "writable")
+tlp_acf_pos_hdng	= XPLMFindDataRef("sim/flightmodel/position/psi")
 
 -- The MASTER copy of the aircraft's orientation when the physics model is in, units quaternion
 local acf_q = dataref_table("sim/flightmodel/position/q")
 
 -- Aircraft velocity in OpenGL coordinates (meter/sec)
-dataref("acf_loc_vx", "sim/flightmodel/position/local_vx", "writable")
-dataref("acf_loc_vy", "sim/flightmodel/position/local_vy", "writable")
-dataref("acf_loc_vz", "sim/flightmodel/position/local_vz", "writable")
+tlp_acf_loc_vx	= XPLMFindDataRef("sim/flightmodel/position/local_vx")
+tlp_acf_loc_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
+tlp_acf_loc_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
 
 ----------------------------------------------------------------------------
 -- Local variables
@@ -210,9 +211,9 @@ end
 -- Target to current position
 function get_pos()
 	-- read current aircraft position
-	trg_pos_pitch = acf_pos_pitch
-	trg_pos_roll = acf_pos_roll
-	trg_pos_hdng = acf_pos_heading
+	trg_pos_pitch = XPLMGetDataf(tlp_acf_pos_pitch)
+	trg_pos_roll = XPLMGetDataf(tlp_acf_pos_roll)
+	trg_pos_hdng = XPLMGetDataf(tlp_acf_pos_hdng)
 end
 
 -- Target to current airspeed
@@ -226,6 +227,8 @@ end
 ----------------------------------------------------------------------------
 -- Jump to target world location from input values
 function jump(lat, lon, alt)
+	-- Create variables for converted coordinates
+	local x, y, z
 	-- Check latitude value is correct
 	if lat == nil or lat < -90 or lat > 90 then
 		-- if not, apply current latitude location
@@ -240,16 +243,19 @@ function jump(lat, lon, alt)
 	if alt == nil or alt < 0 or alt > 20000 then
 		alt = ELEVATION
 	end
-	-- Convert and jump target location
-	acf_loc_x, acf_loc_y, acf_loc_z = world_to_local(lat, lon, alt)
+	-- Convert and jump to target location
+	x, y, z = world_to_local(lat, lon, alt)
+	XPLMSetDatad(tlp_acf_loc_x, x)
+	XPLMSetDatad(tlp_acf_loc_y, y)
+	XPLMSetDatad(tlp_acf_loc_z, z)
 end
 
 -- Move airtcraft position
 function move(pitch, roll, heading)
 	-- Move aircraft (camera) to input position via datarefs
-	acf_pos_pitch = pitch
-	acf_pos_roll = roll
-	acf_pos_heading = heading
+	XPLMSetDataf(tlp_acf_pos_pitch, pitch)
+	XPLMSetDataf(tlp_acf_pos_roll, roll)
+	XPLMSetDataf(tlp_acf_pos_hdng, heading)
 	-- Сonvert from Euler to quaternion
 	pitch = math.pi / 360 * pitch
 	roll = math.pi / 360 * roll
@@ -267,9 +273,9 @@ function spd_up(speed, heading, pitch)
 	local heading = math.rad(heading)
 	local pitch = math.rad(pitch)
 	-- Direction and amount of velocity through the target position and speed
-	acf_loc_vx = speed * math.sin(heading) * math.cos(pitch)
-	acf_loc_vy = speed * math.sin(pitch)
-	acf_loc_vz = speed * math.cos(heading) * -1 * math.cos(pitch)
+	XPLMSetDataf(tlp_acf_loc_vx, speed * math.sin(heading) * math.cos(pitch))
+	XPLMSetDataf(tlp_acf_loc_vy, speed * math.sin(pitch))
+	XPLMSetDataf(tlp_acf_loc_vz, speed * math.cos(heading) * -1 * math.cos(pitch))
 end
 
 -- Freeze an aircraft in space except time
@@ -659,7 +665,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", acf_pos_pitch))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(tlp_acf_pos_pitch)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -688,7 +694,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", acf_pos_roll))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(tlp_acf_pos_roll)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -719,7 +725,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", acf_pos_heading))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(tlp_acf_pos_hdng)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -1001,7 +1007,7 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
 	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
 		-- Speed up aircraft
-		spd_up(trg_spd_gnd, acf_pos_heading, acf_pos_pitch)
+		spd_up(trg_spd_gnd, XPLMGetDataf(tlp_acf_pos_hdng), XPLMGetDataf(tlp_acf_pos_pitch))
 	end
 end
 
