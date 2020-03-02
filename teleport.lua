@@ -2,8 +2,8 @@
 ----------------------------------------------------------------------------
 Script:   Teleport
 Author:   shryft
-Version:  1.3
-Build:    2020-02-27
+Version:  1.3.1
+Build:    2020-03-02
 Description:
 The script gives ability to move aircraft at any location,
 set altitude, position and speed.
