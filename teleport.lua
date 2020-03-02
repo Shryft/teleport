@@ -66,52 +66,55 @@ void	XPLMWorldToLocal(
 -- DataRefs readonly
 ----------------------------------------------------------------------------
 -- Aircraft terrain altitude
-dataref("acf_loc_agl", "sim/flightmodel/position/y_agl", "readonly")
+local acf_loc_agl	= XPLMFindDataRef("sim/flightmodel/position/y_agl")
 -- Aircraft ground speed
-dataref("acf_spd_gnd", "sim/flightmodel/position/groundspeed", "readonly")
+local acf_spd_gnd	= XPLMFindDataRef("sim/flightmodel/position/groundspeed")
 -- Air speed indicated - this takes into account air density and wind direction
-dataref("acf_spd_air_kias", "sim/flightmodel/position/indicated_airspeed", "readonly")
+local acf_spd_air_kias	= XPLMFindDataRef("sim/flightmodel/position/indicated_airspeed")
 -- Air speed true - this does not take into account air density at altitude!
-dataref("acf_spd_air_ms", "sim/flightmodel/position/true_airspeed", "readonly")
+local acf_spd_air_ms	= XPLMFindDataRef("sim/flightmodel/position/true_airspeed")
 
 ----------------------------------------------------------------------------
 -- DataRefs writable
 ----------------------------------------------------------------------------
 -- To avoid conficts with other scripts and have maximum performance we use XPLMDateref
 -- Aircraft location in OpenGL coordinates
-tlp_acf_loc_x	= XPLMFindDataRef("sim/flightmodel/position/local_x")
-tlp_acf_loc_y	= XPLMFindDataRef("sim/flightmodel/position/local_y")
-tlp_acf_loc_z	= XPLMFindDataRef("sim/flightmodel/position/local_z")
+local acf_loc_x	= XPLMFindDataRef("sim/flightmodel/position/local_x")
+local acf_loc_y	= XPLMFindDataRef("sim/flightmodel/position/local_y")
+local acf_loc_z	= XPLMFindDataRef("sim/flightmodel/position/local_z")
 
 -- Aircraft position in OpenGL coordinates
 -- The pitch relative to the plane normal to the Y axis in degrees
-tlp_acf_pos_pitch	= XPLMFindDataRef("sim/flightmodel/position/theta")
+local acf_pos_pitch	= XPLMFindDataRef("sim/flightmodel/position/theta")
 -- The roll of the aircraft in degrees
-tlp_acf_pos_roll	= XPLMFindDataRef("sim/flightmodel/position/phi")
+local acf_pos_roll	= XPLMFindDataRef("sim/flightmodel/position/phi")
 -- The true heading of the aircraft in degrees from the Z axis
-tlp_acf_pos_hdng	= XPLMFindDataRef("sim/flightmodel/position/psi")
+local acf_pos_hdng	= XPLMFindDataRef("sim/flightmodel/position/psi")
 
 -- The MASTER copy of the aircraft's orientation when the physics model is in, units quaternion
-local acf_q = dataref_table("sim/flightmodel/position/q")
+local acf_pos_q	= XPLMFindDataRef("sim/flightmodel/position/q")
 
 -- Aircraft velocity in OpenGL coordinates (meter/sec)
-tlp_acf_loc_vx	= XPLMFindDataRef("sim/flightmodel/position/local_vx")
-tlp_acf_loc_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
-tlp_acf_loc_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
+local acf_loc_vx	= XPLMFindDataRef("sim/flightmodel/position/local_vx")
+local acf_loc_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
+local acf_loc_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
+
+-- This is the multiplier for real-time...1 = realtime, 2 = 2x, 0 = paused, etc.
+local sim_speed	= XPLMFindDataRef("sim/time/sim_speed")
 
 ----------------------------------------------------------------------------
 -- Local variables
 ----------------------------------------------------------------------------
 -- Imgui script window
-local tlp_wnd = nil
+local wnd = nil
 -- Window shown
-local tlp_show_only_once = 0
+local wnd_show_only_once = 0
 -- Window hidden
-local tlp_hide_only_once = 0
+local wnd_hide_only_once = 0
 -- Window width
-local tlp_x = 480
+local wnd_x = 480
 -- Window height
-local tlp_y = 585
+local wnd_y = 585
 
 -- Latitude input string variable, world coordinates in degrees
 local trg_loc_lat_str = ""
@@ -211,15 +214,15 @@ end
 -- Target to current position
 function get_pos()
 	-- read current aircraft position
-	trg_pos_pitch = XPLMGetDataf(tlp_acf_pos_pitch)
-	trg_pos_roll = XPLMGetDataf(tlp_acf_pos_roll)
-	trg_pos_hdng = XPLMGetDataf(tlp_acf_pos_hdng)
+	trg_pos_pitch = XPLMGetDataf(acf_pos_pitch)
+	trg_pos_roll = XPLMGetDataf(acf_pos_roll)
+	trg_pos_hdng = XPLMGetDataf(acf_pos_hdng)
 end
 
 -- Target to current airspeed
 function get_spd()
 	-- read current true airspeed
-	trg_spd_gnd = acf_spd_air_ms
+	trg_spd_gnd = XPLMGetDataf(acf_spd_air_ms)
 end
 
 ----------------------------------------------------------------------------
@@ -245,26 +248,29 @@ function jump(lat, lon, alt)
 	end
 	-- Convert and jump to target location
 	x, y, z = world_to_local(lat, lon, alt)
-	XPLMSetDatad(tlp_acf_loc_x, x)
-	XPLMSetDatad(tlp_acf_loc_y, y)
-	XPLMSetDatad(tlp_acf_loc_z, z)
+	XPLMSetDatad(acf_loc_x, x)
+	XPLMSetDatad(acf_loc_y, y)
+	XPLMSetDatad(acf_loc_z, z)
 end
 
 -- Move airtcraft position
 function move(pitch, roll, heading)
 	-- Move aircraft (camera) to input position via datarefs
-	XPLMSetDataf(tlp_acf_pos_pitch, pitch)
-	XPLMSetDataf(tlp_acf_pos_roll, roll)
-	XPLMSetDataf(tlp_acf_pos_hdng, heading)
+	XPLMSetDataf(acf_pos_pitch, pitch)
+	XPLMSetDataf(acf_pos_roll, roll)
+	XPLMSetDataf(acf_pos_hdng, heading)
 	-- Сonvert from Euler to quaternion
 	pitch = math.pi / 360 * pitch
 	roll = math.pi / 360 * roll
 	heading = math.pi / 360 * heading
+	-- Calc position in quaternion array
+	trg_pos_q = {}
+	trg_pos_q[0] = math.cos(heading) * math.cos(pitch) * math.cos(roll) + math.sin(heading) * math.sin(pitch) * math.sin(roll)
+	trg_pos_q[1] = math.cos(heading) * math.cos(pitch) * math.sin(roll) - math.sin(heading) * math.sin(pitch) * math.cos(roll)
+	trg_pos_q[2] = math.cos(heading) * math.sin(pitch) * math.cos(roll) + math.sin(heading) * math.cos(pitch) * math.sin(roll)
+	trg_pos_q[3] = -math.cos(heading) * math.sin(pitch) * math.sin(roll) + math.sin(heading) * math.cos(pitch) * math.cos(roll)
 	-- Move aircraft (physically) to input position via datarefs
-	acf_q[0] = math.cos(heading) * math.cos(pitch) * math.cos(roll) + math.sin(heading) * math.sin(pitch) * math.sin(roll)
-	acf_q[1] = math.cos(heading) * math.cos(pitch) * math.sin(roll) - math.sin(heading) * math.sin(pitch) * math.cos(roll)
-	acf_q[2] = math.cos(heading) * math.sin(pitch) * math.cos(roll) + math.sin(heading) * math.cos(pitch) * math.sin(roll)
-	acf_q[3] = -math.cos(heading) * math.sin(pitch) * math.sin(roll) + math.sin(heading) * math.cos(pitch) * math.cos(roll)
+	XPLMSetDatavf(acf_pos_q, trg_pos_q, 0, 4)
 end
 
 -- Speed up aircraft from target position
@@ -273,9 +279,9 @@ function spd_up(speed, heading, pitch)
 	local heading = math.rad(heading)
 	local pitch = math.rad(pitch)
 	-- Direction and amount of velocity through the target position and speed
-	XPLMSetDataf(tlp_acf_loc_vx, speed * math.sin(heading) * math.cos(pitch))
-	XPLMSetDataf(tlp_acf_loc_vy, speed * math.sin(pitch))
-	XPLMSetDataf(tlp_acf_loc_vz, speed * math.cos(heading) * -1 * math.cos(pitch))
+	XPLMSetDataf(acf_loc_vx, speed * math.sin(heading) * math.cos(pitch))
+	XPLMSetDataf(acf_loc_vy, speed * math.sin(pitch))
+	XPLMSetDataf(acf_loc_vz, speed * math.cos(heading) * -1 * math.cos(pitch))
 end
 
 -- Freeze an aircraft in space except time
@@ -286,6 +292,10 @@ function freeze(lat, lon, alt, pitch, roll, heading, gs)
 		jump(lat, lon, alt)
 		move(pitch, roll, heading)
 		spd_up(gs, heading, pitch)
+		-- Pause X-Plane to avoid aircraft twitching
+		if XPLMGetDatai(sim_speed) == 1 then
+			XPLMSetDatai(sim_speed, 0)
+		end
 	end
 end
 
@@ -439,15 +449,15 @@ end
 -- Imgui functions
 ----------------------------------------------------------------------------
 -- Imgui floating window main function
-function tlp_build(tlp_wnd, x, y)
+function tlp_build(wnd, x, y)
 	-- Default indent from the edge of the window
 	local indent = imgui.GetCursorPosX()
 	
-	-- Fix variable tlp_x (window width) with border indent (border size)
-	local tlp_x = tlp_x - indent * 2
+	-- Fix variable wnd_x (window width) with border indent (border size)
+	local wnd_x = wnd_x - indent * 2
 	
 	-- Set title indent
-	local title_indent = indent + tlp_x / 2 - 50
+	local title_indent = indent + wnd_x / 2 - 50
 	-- Set title type 1 color
 	local title_1_color = 0xFFEC652B
 	-- Set title type 2 color
@@ -461,12 +471,12 @@ function tlp_build(tlp_wnd, x, y)
 	local col_size = {}
 	-- Set column arrays
 	for i= 0, col - 1 do
-	   col_x[i] = tlp_x / col * i
-	   col_size[i] = tlp_x / col
+	   col_x[i] = wnd_x / col * i
+	   col_size[i] = wnd_x / col
 	end
 	
 	-- Button type 1 width
-	local but_1_x = tlp_x / col
+	local but_1_x = wnd_x / col
 	-- Button type 1 height
 	local but_1_y = 19
 	-- Button type 2 width
@@ -633,7 +643,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.2f", acf_loc_agl))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_loc_agl)))
 	
 	-- MSL (mean sea level)
 	-- Variable
@@ -646,7 +656,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.2f", ELEVATION - acf_loc_agl))
+	imgui.TextUnformatted(string.format("%.2f", ELEVATION - XPLMGetDataf(acf_loc_agl)))
 	
 	-- Type 1 title for position
 	imgui.PushStyleColor(imgui.constant.Col.Text, title_1_color)
@@ -665,7 +675,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(tlp_acf_pos_pitch)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_pos_pitch)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -694,7 +704,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(tlp_acf_pos_roll)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_pos_roll)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -725,7 +735,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(tlp_acf_pos_hdng)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_pos_hdng)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -762,7 +772,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", acf_spd_air_kias * 0.514))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_spd_air_kias) * 0.514))
 	
 	-- Indicated groundspeed (meter/sec)
 	-- Variable
@@ -775,7 +785,7 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", acf_spd_gnd))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_spd_gnd)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -805,11 +815,11 @@ function tlp_build(tlp_wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", acf_spd_air_ms))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_spd_air_ms)))
 	
 	-- Button that target to current aircraft status
 	imgui.TextUnformatted("")
-	if imgui.Button("TARGET", tlp_x, but_2_y) then
+	if imgui.Button("TARGET", wnd_x, but_2_y) then
 		-- Get all!
 		get_loc()
 		get_alt()
@@ -845,7 +855,7 @@ function tlp_build(tlp_wnd, x, y)
 	end
 	
 	-- Create input string for writing target save name
-	imgui.PushItemWidth(tlp_x - 44)
+	imgui.PushItemWidth(wnd_x - 44)
     local changed, newVal = imgui.InputText("name", trg_save_name, 40) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
     if changed then
@@ -969,14 +979,14 @@ function tlp_build(tlp_wnd, x, y)
 	-- Set color for freeze indicated status
 	imgui.PushStyleColor(imgui.constant.Col.Text, freeze_color)
 	-- Button that freeze aircraft
-	if imgui.Button("FREEZE", tlp_x, but_2_y) then
+	if imgui.Button("FREEZE", wnd_x, but_2_y) then
 		-- Freeze an aircraft
 		freeze_toggle()
 	end
 	imgui.PopStyleColor()
 	
 	-- Button that teleports you to all input targets
-	if imgui.Button("TELEPORT", tlp_x, but_2_y) then
+	if imgui.Button("TELEPORT", wnd_x, but_2_y) then
 		-- Teleport aircraft
 		jump(trg_loc_lat, trg_loc_lon, trg_loc_alt)
 		move(trg_pos_pitch, trg_pos_roll, trg_pos_hdng)
@@ -1007,7 +1017,7 @@ function tlp_build(tlp_wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
 	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
 		-- Speed up aircraft
-		spd_up(trg_spd_gnd, XPLMGetDataf(tlp_acf_pos_hdng), XPLMGetDataf(tlp_acf_pos_pitch))
+		spd_up(trg_spd_gnd, XPLMGetDataf(acf_pos_hdng), XPLMGetDataf(acf_pos_pitch))
 	end
 end
 
@@ -1020,19 +1030,19 @@ function tlp_show()
 	trg_local_file = trg_load_file(trg_local_dir)
 	trg_global_file = trg_load_file(trg_global_dir)
 	-- Create floating window
-	tlp_wnd = float_wnd_create(tlp_x, tlp_y, 1, true)
+	wnd = float_wnd_create(wnd_x, wnd_y, 1, true)
 	-- Set floating window title
-	float_wnd_set_title(tlp_wnd, "Teleport")
+	float_wnd_set_title(wnd, "Teleport")
 	-- Updating floating window
-	float_wnd_set_imgui_builder(tlp_wnd, "tlp_build")
+	float_wnd_set_imgui_builder(wnd, "tlp_build")
 end
 
 -- Hide imgui floating window
 function tlp_hide()
 	-- If the window is showed
-    if tlp_wnd then
+    if wnd then
 		-- Destroy window
-        float_wnd_destroy(tlp_wnd)
+        float_wnd_destroy(wnd)
 		-- Close target data files
 		trg_local_file:close()
 		trg_global_file:close()
@@ -1046,18 +1056,18 @@ function  tlp_toggle()
 	-- If true
 	if tlp_show_wnd then
 		-- check window did not shown
-		if tlp_show_only_once == 0 then
+		if wnd_show_only_once == 0 then
 			tlp_show()
-			tlp_show_only_once = 1
-			tlp_hide_only_once = 0
+			wnd_show_only_once = 1
+			wnd_hide_only_once = 0
 		end
 	-- if false
 	else
 		-- check window did not hiden
-		if tlp_hide_only_once == 0 then
+		if wnd_hide_only_once == 0 then
 			tlp_hide()
-			tlp_hide_only_once = 1
-			tlp_show_only_once = 0
+			wnd_hide_only_once = 1
+			wnd_show_only_once = 0
 		end
 	end
 end
@@ -1077,6 +1087,8 @@ function freeze_toggle()
 	else
 		-- Return aircraft target speed
 		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_pitch)
+		-- Resume X-Plane from pause
+		XPLMSetDatai(sim_speed, 1)
 	end
 end
 
@@ -1107,6 +1119,7 @@ get_spd()
 
 -- Freeze event
 function freeze_event()
+	-- Freeze aircraft at target position.
 	freeze(trg_loc_lat, trg_loc_lon, trg_loc_alt, trg_pos_pitch, trg_pos_roll, trg_pos_hdng, 0)
 end
 do_every_frame("freeze_event()")
