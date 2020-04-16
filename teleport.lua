@@ -2,8 +2,8 @@
 ----------------------------------------------------------------------------
 Script:   Teleport
 Author:   shryft
-Version:  1.3.1
-Build:    2020-03-02
+Version:  1.5
+Build:    2020-04-16
 Description:
 The script gives ability to move aircraft at any location,
 set altitude, position and speed.
@@ -53,13 +53,45 @@ local XPLM = ffi.load(XPLMlib)
 
 -- load xplm functions
 ffi.cdef[[
-void	XPLMWorldToLocal(
+void XPLMWorldToLocal(
 	double inLatitude,    
 	double inLongitude,    
 	double inAltitude,    
-	double * outX,    
-	double * outY,    
-	double * outZ);
+	double *outX,    
+	double *outY,    
+	double *outZ);
+
+enum {
+     xplm_FlightLoop_Phase_BeforeFlightModel = 0
+    ,xplm_FlightLoop_Phase_AfterFlightModel = 1
+};
+
+typedef void *XPLMFlightLoopID;
+typedef int XPLMFlightLoopPhaseType;
+
+typedef float (*XPLMFlightLoop_f)(
+	float inElapsedSinceLastCall,
+	float inElapsedTimeSinceLastFlightLoop,
+	int inCounter,
+	void *inRefcon);
+
+typedef struct {
+	int structSize;
+	XPLMFlightLoopPhaseType phase;
+	XPLMFlightLoop_f callbackFunc;
+	void *refcon;
+} XPLMCreateFlightLoop_t;
+
+XPLMFlightLoopID XPLMCreateFlightLoop(
+	XPLMCreateFlightLoop_t *inParams);
+
+void XPLMDestroyFlightLoop(
+	XPLMFlightLoopID inFlightLoopID);
+
+void XPLMScheduleFlightLoop(
+	XPLMFlightLoopID inFlightLoopID,
+	float inInterval,
+	int inRelativeToNow);
 ]]
 
 ----------------------------------------------------------------------------
@@ -100,7 +132,23 @@ local acf_loc_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
 local acf_loc_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
 
 -- This is the multiplier for real-time...1 = realtime, 2 = 2x, 0 = paused, etc.
-local sim_speed	= XPLMFindDataRef("sim/time/sim_speed")
+--local sim_speed	= XPLMFindDataRef("sim/time/sim_speed")
+
+-- Aircraft total weight (kg)
+local acf_weight_total = XPLMFindDataRef("sim/flightmodel/weight/m_total")
+
+-- Aircraft force moments
+local acf_force_m_roll = XPLMFindDataRef("sim/flightmodel/forces/L_total")
+local acf_force_m_ptch = XPLMFindDataRef("sim/flightmodel/forces/M_total")
+local acf_force_m_yaw = XPLMFindDataRef("sim/flightmodel/forces/N_total")
+
+-- Aircraft total forces
+local acf_force_t_alng = XPLMFindDataRef("sim/flightmodel/forces/faxil_total")
+local acf_force_t_down = XPLMFindDataRef("sim/flightmodel/forces/fnrml_total")
+local acf_force_t_side = XPLMFindDataRef("sim/flightmodel/forces/fside_total")
+
+-- Override aircraft forces
+local override_forces = XPLMFindDataRef("sim/operation/override/override_forces")
 
 ----------------------------------------------------------------------------
 -- Local variables
@@ -162,6 +210,9 @@ local trg_save_name = ""
 
 -- Target data read/write status
 local trg_status = ""
+
+-- Create ID variable for flight loop callback
+local freeze_loop_id = ffi.new("XPLMFlightLoopID")
 
 ----------------------------------------------------------------------------
 -- XPLM functions
@@ -285,18 +336,78 @@ function spd_up(speed, heading, pitch)
 end
 
 -- Freeze an aircraft in space except time
-function freeze(lat, lon, alt, pitch, roll, heading, gs)
+function freeze_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
-	if freeze_on then
-		-- Teleport to target every time except location
-		jump(lat, lon, alt)
-		move(pitch, roll, heading)
-		spd_up(gs, heading, pitch)
-		-- Pause X-Plane to avoid aircraft twitching
-		if XPLMGetDatai(sim_speed) == 1 then
-			XPLMSetDatai(sim_speed, 0)
-		end
+	if freeze_enable then
+		-- Freeze aircraft at target position with 0 speed
+		jump(trg_loc_lat, trg_loc_lon, trg_loc_alt)
+		move(trg_pos_pitch, trg_pos_roll, trg_pos_hdng)
+		spd_up(0, trg_pos_hdng, trg_pos_pitch)
+		-- Override forces to stabilize physics
+		set_forces(trg_pos_pitch, trg_pos_roll)
+		-- Resume loop
+		return ffi.new("float", -1)
+	-- if disabled
+	else
+		-- Stop loop
+		return ffi.new("float", 0)
 	end
+end
+
+-- Override physic forces
+function set_forces(pitch, roll)
+	-- Set aircraft force moments
+	XPLMSetDataf(acf_force_m_roll, 0)
+	XPLMSetDataf(acf_force_m_ptch, 0)
+	XPLMSetDataf(acf_force_m_yaw, 0)
+	-- Aircraft G force from total weight
+	local g_force = XPLMGetDataf(acf_weight_total) * 10 / 1.020587
+	-- Aircraft G force vectors
+	local g_force_alng = g_force * -gyro_alng(pitch)
+	local g_force_down = g_force * gyro_down(roll) * gyro_inv(gyro_alng(pitch))
+	local g_force_side = g_force * -gyro_side(roll) * gyro_inv(gyro_alng(pitch))
+	-- Set aircraft total forces
+	XPLMSetDataf(acf_force_t_alng, g_force_alng)
+	XPLMSetDataf(acf_force_t_down, g_force_down)
+	XPLMSetDataf(acf_force_t_side, g_force_side)
+end
+
+-- Convert axis along aircraft to proportional multiplier
+function gyro_alng(axis)
+	solution = (axis / 90)
+	return solution
+end
+
+-- Convert axis across aircraft to proportional multiplier
+function gyro_side(axis)
+	if axis > 90 then
+		solution = (axis - 180) / -90
+	elseif axis < -90 then
+		solution = (axis + 180) / -90
+	else
+		solution = axis / 90
+	end
+	return solution
+end
+
+-- Convert axis perpendicular to aircraft to proportional multiplier
+function gyro_down(axis)
+	if axis >= 0 then
+		solution = (axis - 90) / -90
+	else
+		solution = (axis + 90) / 90
+	end
+	return solution
+end
+
+-- Inverse axis proportional multiplier
+function gyro_inv(solution)
+	if solution >= 0 then
+		solution = 1 - solution
+	else
+		solution = 1 + solution
+	end
+	return solution
 end
 
 ----------------------------------------------------------------------------
@@ -506,7 +617,7 @@ function tlp_build(wnd, x, y)
 	end
 	-- Set freeze status color
 	local freeze_color
-	if freeze_on then
+	if freeze_enable then
 		freeze_color = 0xFFFFD37A
 	else
 		freeze_color = 0xFFFFFFFF
@@ -1075,20 +1186,34 @@ end
 -- Freeze aircraft toggle
 function freeze_toggle()
 	-- Invert toggle variable
-	freeze_on = not freeze_on
+	freeze_enable = not freeze_enable
 	-- If true
-	if freeze_on then
+	if freeze_enable then
 		-- Get targets
 		get_loc()
 		get_alt()
 		get_pos()
 		get_spd()
+		-- Create loop struct
+		local freeze_loop_struct = ffi.new('XPLMCreateFlightLoop_t',
+											ffi.sizeof('XPLMCreateFlightLoop_t'),
+											XPLM.xplm_FlightLoop_Phase_AfterFlightModel,
+											freeze_loop,
+											refcon)
+		-- Create new flight loop id
+		freeze_loop_id = XPLM.XPLMCreateFlightLoop(freeze_loop_struct)
+		-- Start flight loop now
+		XPLM.XPLMScheduleFlightLoop(freeze_loop_id, -1, 1)
+		-- Start forces override
+		XPLMSetDatai(override_forces, 1)
 	-- if not
 	else
+		-- Delete flight loop id
+		XPLM.XPLMDestroyFlightLoop(freeze_loop_id)
 		-- Return aircraft target speed
 		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_pitch)
-		-- Resume X-Plane from pause
-		XPLMSetDatai(sim_speed, 1)
+		-- Stop forces override
+		XPLMSetDatai(override_forces, 0)
 	end
 end
 
@@ -1116,10 +1241,3 @@ get_loc()
 get_alt()
 get_pos()
 get_spd()
-
--- Freeze event
-function freeze_event()
-	-- Freeze aircraft at target position.
-	freeze(trg_loc_lat, trg_loc_lon, trg_loc_alt, trg_pos_pitch, trg_pos_roll, trg_pos_hdng, 0)
-end
-do_every_frame("freeze_event()")
