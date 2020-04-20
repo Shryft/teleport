@@ -223,7 +223,7 @@ local wnd_show_only_once = 0
 local wnd_hide_only_once = 0
 -- Window size
 local wnd_x = 480
-local wnd_y = 587
+local wnd_y = 590
 
 -- Input string variables for targeting world coordinates
 local trg_lat_str = ""
@@ -231,10 +231,6 @@ local trg_lon_str = ""
 -- World coordinates input variables
 local trg_lat = 0
 local trg_lon = 0
-
--- Altitude input mode
-local trg_alt_mode = {"ASL", "AGL"}
-local trg_alt_mode_select = 1
 
 -- Altitude input variables
 local trg_alt_asl = 0
@@ -274,15 +270,16 @@ local trg_save_name = ""
 -- Target data read/write status
 local trg_status = ""
 
--- Create ID variable for flight loop callback
-local freeze_loop_id = ffi.new("XPLMFlightLoopID")
-
 -- Create ID variable for probe Y-terrain testing
 local probe_ref = ffi.new("XPLMProbeRef")
 
 -- Create C structures for probe Y-terrain testing
 local probe_addr = ffi.new("XPLMProbeInfo_t*")
 local probe_value = ffi.new("XPLMProbeInfo_t[1]")
+
+-- Create ID for flight loop callbacks
+local freeze_loop_id = ffi.new("XPLMFlightLoopID")
+local probe_loop_id = ffi.new("XPLMFlightLoopID")
 
 ----------------------------------------------------------------------------
 -- XPLM functions
@@ -338,6 +335,14 @@ end
 ----------------------------------------------------------------------------
 -- Target functions
 ----------------------------------------------------------------------------
+-- Target to current aircraft state
+function get_targets()
+	get_loc()
+	get_alt()
+	get_pos()
+	get_spd()
+end
+
 -- Target to current location
 function get_loc()
 	-- Latitude input string variable, world coordinates in degrees
@@ -355,9 +360,9 @@ function get_alt()
 	-- read above sea altitude
 	trg_alt_asl = XPLMGetDatad(acf_elv)
 	-- read terrain level
-	trg_alt_trn = probe_terrain(XPLMGetDatad(acf_lat), XPLMGetDatad(acf_lon), XPLMGetDatad(acf_elv))
+	--trg_alt_trn = probe_terrain(XPLMGetDatad(acf_lat), XPLMGetDatad(acf_lon), XPLMGetDatad(acf_elv))
 	-- calc above ground altitude
-	trg_alt_agl = XPLMGetDatad(acf_elv) - trg_alt_trn
+	--trg_alt_agl = XPLMGetDatad(acf_elv) - trg_alt_trn
 end
 
 -- Target to current position
@@ -377,8 +382,26 @@ end
 ----------------------------------------------------------------------------
 -- Teleport functions
 ----------------------------------------------------------------------------
+-- Teleport aircraft
+function set_acf(lat, lon, elv,
+				pitch, roll, heading,
+				ground_speed)
+	-- Set inputs
+	local lat = lat or trg_lat
+	local lon = lon or trg_lon
+	local elv = elv or trg_alt_asl
+	local pitch = pitch or trg_pos_ptch
+	local roll = roll or trg_pos_roll
+	local heading = heading or trg_pos_hdng
+	local ground_speed = ground_speed or trg_spd_gnd
+	-- Move to target state
+	set_loc(lat, lon, elv)
+	set_pos(pitch, roll, heading)
+	set_spd(ground_speed, heading, pitch)
+end
+
 -- Jump to target world location from input values
-function jump(lat, lon, alt)
+function set_loc(lat, lon, alt)
 	-- Create variables for converted coordinates
 	local x, y, z
 	-- Check latitude value is correct
@@ -403,7 +426,7 @@ function jump(lat, lon, alt)
 end
 
 -- Move airtcraft position
-function move(pitch, roll, heading)
+function set_pos(pitch, roll, heading)
 	-- Move aircraft (camera) to input position via datarefs
 	XPLMSetDataf(acf_pos_pitch, pitch)
 	XPLMSetDataf(acf_pos_roll, roll)
@@ -423,7 +446,7 @@ function move(pitch, roll, heading)
 end
 
 -- Speed up aircraft from target position
-function spd_up(speed, heading, pitch)
+function set_spd(speed, heading, pitch)
 	-- Convert input degrees to radians
 	local heading = math.rad(heading)
 	local pitch = math.rad(pitch)
@@ -438,9 +461,7 @@ function freeze_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
 	if freeze_enable then
 		-- Freeze aircraft at target position with 0 speed
-		jump(trg_lat, trg_lon, trg_alt_asl)
-		move(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
-		spd_up(0, trg_pos_hdng, trg_pos_ptch)
+		set_acf(null, null, null, null, null, null, 0)
 		-- Override forces to stabilize physics
 		set_forces(trg_pos_ptch, trg_pos_roll)
 		-- Resume loop
@@ -450,6 +471,31 @@ function freeze_loop(last_call, last_loop, counter, refcon)
 		-- Stop loop
 		return ffi.new("float", 0)
 	end
+end
+
+-- Start flight loop
+function tlp_flight_loop_start(loop, id)
+	-- Create flight loop struct
+	local loop_struct = ffi.new('XPLMCreateFlightLoop_t',
+										ffi.sizeof('XPLMCreateFlightLoop_t'),
+										XPLM.xplm_FlightLoop_Phase_AfterFlightModel,
+										loop,
+										refcon)
+	-- Create new flight loop id
+	id = XPLM.XPLMCreateFlightLoop(loop_struct)
+	-- Start flight loop now
+	XPLM.XPLMScheduleFlightLoop(id, -1, 1)
+end
+
+-- Stop flight loop
+function tlp_flight_loop_stop(id)
+	-- Check flight loop id
+	if id ~= nil then
+		-- Delete flight loop id
+		XPLM.XPLMDestroyFlightLoop(id)
+	end
+	-- Clear flight loop id variable
+	id = nil
 end
 
 -- Override physic forces
@@ -515,6 +561,7 @@ function tlp_probe_load()
 	probe_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
 end
 
+-- Destroy Y-terrain testing probe
 function tlp_probe_unload()
     if probe_ref ~= nil then
         XPLM.XPLMDestroyProbe(probe_ref)    
@@ -539,6 +586,27 @@ function probe_terrain(lat, lon, alt)
 	-- Output terrain elevation
 	_, _, terrain = tlp_local_to_world(probe_value[0].locationX, probe_value[0].locationY, probe_value[0].locationZ)
 	return terrain
+end
+
+-- 
+function probe_loop(last_call, last_loop, counter, refcon)
+	-- If enabled
+	if tlp_show_wnd then
+		-- read terrain level
+		trg_alt_trn = probe_terrain(trg_lat, trg_lon, XPLMGetDatad(acf_elv))
+		-- calc above ground altitude
+		trg_alt_agl = trg_alt_asl - trg_alt_trn
+		-- prevent underground collide
+		if trg_alt_agl < 0 then
+			trg_alt_asl = trg_alt_trn
+		end
+		-- Resume loop
+		return ffi.new("float", -1)
+	-- if disabled
+	else
+		-- Stop loop
+		return ffi.new("float", 0)
+	end
 end
 
 ----------------------------------------------------------------------------
@@ -889,14 +957,15 @@ function tlp_build(wnd, x, y)
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.PushItemWidth(col_size[3])
-	local changed, newInt = imgui.InputInt("  ", trg_alt_agl)
-	if changed then
-		trg_alt_asl = trg_alt_asl + newInt - trg_alt_agl
-		trg_alt_agl = newInt
-	end
-	imgui.PopItemWidth()
+	-- imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
+	-- imgui.PushItemWidth(col_size[3])
+	-- local changed, newInt = imgui.InputInt("  ", trg_alt_agl)
+	-- if changed then
+		-- trg_alt_asl = trg_alt_asl + newInt - trg_alt_agl
+		-- trg_alt_agl = newInt
+	-- end
+	-- imgui.PopItemWidth()
+	imgui.TextUnformatted(string.format("%.2f", trg_alt_agl))
 	
 	-- MSL (mean sea level)
 	-- Variable
@@ -913,8 +982,6 @@ function tlp_build(wnd, x, y)
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	--imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	--imgui.PushItemWidth(col_size[3])
 	imgui.TextUnformatted(string.format("%.2f", trg_alt_trn))
 	
 	-- Type 1 title for position
@@ -1079,11 +1146,8 @@ function tlp_build(wnd, x, y)
 	-- Button that target to current aircraft status
 	imgui.TextUnformatted("")
 	if imgui.Button("TARGET", wnd_x, but_2_y) then
-		-- Get all!
-		get_loc()
-		get_alt()
-		get_pos()
-		get_spd()
+		-- Get all targets
+		get_targets()
 	end
 	-- Button that target to current location
 	imgui.SetCursorPosX(indent + col_x[0])
@@ -1247,36 +1311,34 @@ function tlp_build(wnd, x, y)
 	-- Button that teleports you to all input targets
 	if imgui.Button("TELEPORT", wnd_x, but_2_y) then
 		-- Teleport aircraft
-		jump(trg_lat, trg_lon, trg_alt_asl)
-		move(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
-		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_ptch)
+		set_acf()
 	end
 	-- Button that teleport to target location
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("to location", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target location
-		jump(trg_lat, trg_lon)
+		set_loc(trg_lat, trg_lon)
 	end
 	-- Button that teleport to target altitude
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("to altitude", but_1_x - indent / 4, but_1_y) then
 		-- Teleport to target altitude
-		jump(null, null, trg_alt_asl)
+		set_loc(null, null, trg_alt_asl)
 	end
 	-- Button that teleport to target position
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("to position", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target position
-		move(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
+		set_pos(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
 	end
 	-- Button that speed up to target airspeed
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
 	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
 		-- Speed up aircraft
-		spd_up(trg_spd_gnd, XPLMGetDataf(acf_pos_hdng), XPLMGetDataf(acf_pos_pitch))
+		set_spd(trg_spd_gnd, XPLMGetDataf(acf_pos_hdng), XPLMGetDataf(acf_pos_pitch))
 	end
 end
 
@@ -1294,13 +1356,12 @@ function tlp_show()
 	float_wnd_set_title(wnd, "Teleport")
 	-- Updating floating window
 	float_wnd_set_imgui_builder(wnd, "tlp_build")
-	-- Create terrain probe
-	probe_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
+	-- Load probe for Y-terrain testing
+	tlp_probe_load()
+	-- Start Y-terrain probe loop
+	tlp_flight_loop_start(probe_loop, probe_loop_id)
 	-- Get targets at start
-	get_loc()
-	get_alt()
-	get_pos()
-	get_spd()
+	get_targets()
 end
 
 -- Hide imgui floating window
@@ -1312,8 +1373,10 @@ function tlp_hide()
 		-- Close target data files
 		trg_local_file:close()
 		trg_global_file:close()
-		-- Create terrain probe
-		XPLM.XPLMDestroyProbe(probe_ref)
+		-- Unload probe for Y-terrain testing
+		tlp_probe_unload()
+		-- Stop Y-terrain probe loop
+		tlp_flight_loop_stop(probe_loop_id)
     end
 end
 
@@ -1346,29 +1409,18 @@ function freeze_toggle()
 	freeze_enable = not freeze_enable
 	-- If true
 	if freeze_enable then
-		-- Get targets
-		get_loc()
-		get_alt()
-		get_pos()
-		get_spd()
-		-- Create loop struct
-		local freeze_loop_struct = ffi.new('XPLMCreateFlightLoop_t',
-											ffi.sizeof('XPLMCreateFlightLoop_t'),
-											XPLM.xplm_FlightLoop_Phase_AfterFlightModel,
-											freeze_loop,
-											refcon)
-		-- Create new flight loop id
-		freeze_loop_id = XPLM.XPLMCreateFlightLoop(freeze_loop_struct)
-		-- Start flight loop now
-		XPLM.XPLMScheduleFlightLoop(freeze_loop_id, -1, 1)
+		-- Get all targets
+		get_targets()
+		-- Strat loop
+		tlp_flight_loop_start(freeze_loop, freeze_loop_id)
 		-- Start forces override
 		XPLMSetDatai(override_forces, 1)
 	-- if not
 	else
-		-- Delete flight loop id
-		XPLM.XPLMDestroyFlightLoop(freeze_loop_id)
+		-- Stop loop
+		tlp_flight_loop_stop(freeze_loop_id)
 		-- Return aircraft target speed
-		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_ptch)
+		set_spd(trg_spd_gnd, trg_pos_hdng, trg_pos_ptch)
 		-- Stop forces override
 		XPLMSetDatai(override_forces, 0)
 	end
@@ -1389,9 +1441,49 @@ create_command("FlyWithLua/teleport/toggle",
                "tlp_toggle()",
                "",
                "")
-			   
+
+-- Target aircraft current state
+create_command("FlyWithLua/teleport/target",
+               "Target aircraft current state",
+               "get_targets()",
+               "",
+               "")
+
+-- Teleport aircraft to target state
+create_command("FlyWithLua/teleport/teleport",
+               "Teleport aircraft to target state",
+               "set_acf()",
+               "",
+               "")
+
+-- Teleport aircraft to target state
+create_command("FlyWithLua/teleport/freeze",
+               "Freeze aircraft at current state",
+               "freeze_toggle()",
+               "",
+               "")
+
 ----------------------------------------------------------------------------
 -- Events
 ----------------------------------------------------------------------------
--- Load probe for Y-terrain testing
-tlp_probe_load()
+-- Get targets at start
+get_targets()
+
+--DEBUG
+function dev_log()
+	local freeze_loop_str = tostring(freeze_loop)
+	local probe_loop_str = tostring(probe_loop)
+	local freeze_loop_id_str = tostring(freeze_loop_id)
+	local probe_loop_id_str = tostring(probe_loop_id)
+	logMsg("")
+	logMsg("freeze_loop")
+	logMsg(freeze_loop_str)
+	logMsg("probe_loop")
+	logMsg(probe_loop_str)
+	logMsg("freeze_loop_id")
+	logMsg(freeze_loop_id_str)
+	logMsg("probe_loop_id")
+	logMsg(probe_loop_id_str)
+end
+
+do_every_frame("dev_log()")
