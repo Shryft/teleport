@@ -513,6 +513,29 @@ end
 ----------------------------------------------------------------------------
 -- Freeze functions
 ----------------------------------------------------------------------------
+-- Freeze aircraft toggle
+function tlp_frz_tgl()
+	-- Invert toggle variable
+	frz_enable = not frz_enable
+	-- If true
+	if frz_enable then
+		-- Get all targets
+		tlp_get_tgt()
+		-- Strat loop
+		frz_loop_id = tlp_loop_start(tlp_frz_loop, frz_loop_id)
+		-- Start forces override
+		XPLMSetDatai(override_forces, 1)
+	-- if not
+	else
+		-- Stop loop
+		frz_loop_id = tlp_loop_stop(frz_loop_id)
+		-- Return aircraft target speed
+		tlp_set_spd(trg_gs, trg_hdng, trg_ptch)
+		-- Stop forces override
+		XPLMSetDatai(override_forces, 0)
+	end
+end
+
 -- Freeze an aircraft in space except time
 function tlp_frz_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
@@ -773,6 +796,54 @@ end
 ----------------------------------------------------------------------------
 -- Imgui functions
 ----------------------------------------------------------------------------
+-- Show imgui floating window
+function tlp_wnd_show()
+	-- Change window state
+	wnd_state = true
+	-- Create floating window
+	wnd = float_wnd_create(wnd_x, wnd_y, 1, true)
+	-- Set floating window title
+	float_wnd_set_title(wnd, "Teleport")
+	-- Updating floating window
+	float_wnd_set_imgui_builder(wnd, "tlp_wnd_build")
+	-- Do on close
+	float_wnd_set_onclose(wnd, "tlp_wnd_hide")
+	-- Load targets data files
+	trg_local_file = trg_load_file(trg_local_dir)
+	trg_global_file = trg_load_file(trg_global_dir)
+	-- Load probe for Y-terrain testing
+	tlp_prb_load()
+	-- Start Y-terrain probe loop
+	prb_loop_id = tlp_loop_start(tlp_prb_loop, prb_loop_id)
+	-- Get targets at start
+	tlp_get_tgt()
+end
+
+-- Hide imgui floating window
+function tlp_wnd_hide()
+	-- Change window state
+	wnd_state = false
+	-- Close target data files
+	trg_local_file:close()
+	trg_global_file:close()
+	-- Stop Y-terrain probe loop
+	prb_loop_id = tlp_loop_stop(prb_loop_id)
+	-- Unload probe for Y-terrain testing
+	tlp_prb_unload()
+end
+
+-- Toggle imgui floating window
+function  tlp_wnd_tgl()
+	-- Check window state
+	if wnd_state then
+		-- Hide window
+		float_wnd_destroy(wnd)
+	else
+		-- Show window
+		tlp_wnd_show()
+	end
+end
+
 -- Imgui floating window main function
 function tlp_wnd_build(wnd, x, y)
 	-- Default indent from the edge of the window
@@ -972,14 +1043,6 @@ function tlp_wnd_build(wnd, x, y)
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	-- imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	-- imgui.PushItemWidth(col_size[3])
-	-- local changed, newInt = imgui.InputInt("  ", trg_agl)
-	-- if changed then
-		-- trg_asl = trg_asl + newInt - trg_agl
-		-- trg_agl = newInt
-	-- end
-	-- imgui.PopItemWidth()
 	imgui.TextUnformatted(string.format("%.2f", trg_agl))
 	
 	-- MSL (mean sea level)
@@ -1354,80 +1417,6 @@ function tlp_wnd_build(wnd, x, y)
 	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
 		-- Speed up aircraft
 		tlp_set_spd(trg_gs, XPLMGetDataf(acf_hdng), XPLMGetDataf(acf_ptch))
-	end
-end
-
-----------------------------------------------------------------------------
--- Toggle functions
-----------------------------------------------------------------------------
--- Show imgui floating window
-function tlp_wnd_show()
-	-- Change window state
-	wnd_state = true
-	-- Create floating window
-	wnd = float_wnd_create(wnd_x, wnd_y, 1, true)
-	-- Set floating window title
-	float_wnd_set_title(wnd, "Teleport")
-	-- Updating floating window
-	float_wnd_set_imgui_builder(wnd, "tlp_wnd_build")
-	-- Do on close
-	float_wnd_set_onclose(wnd, "tlp_wnd_hide")
-	-- Load targets data files
-	trg_local_file = trg_load_file(trg_local_dir)
-	trg_global_file = trg_load_file(trg_global_dir)
-	-- Load probe for Y-terrain testing
-	tlp_prb_load()
-	-- Start Y-terrain probe loop
-	prb_loop_id = tlp_loop_start(tlp_prb_loop, prb_loop_id)
-	-- Get targets at start
-	tlp_get_tgt()
-end
-
--- Hide imgui floating window
-function tlp_wnd_hide()
-	-- Change window state
-	wnd_state = false
-	-- Close target data files
-	trg_local_file:close()
-	trg_global_file:close()
-	-- Stop Y-terrain probe loop
-	prb_loop_id = tlp_loop_stop(prb_loop_id)
-	-- Unload probe for Y-terrain testing
-	tlp_prb_unload()
-end
-
--- Toggle imgui floating window
-function  tlp_wnd_tgl()
-	-- Check window state
-	if wnd_state then
-		-- Hide window
-		float_wnd_destroy(wnd)
-	else
-		-- Show window
-		tlp_wnd_show()
-	end
-end
-
--- Freeze aircraft toggle
-function tlp_frz_tgl()
-	-- Invert toggle variable
-	frz_enable = not frz_enable
-	-- If true
-	if frz_enable then
-		-- Get all targets
-		tlp_get_tgt()
-		-- Strat loop
-		frz_loop_id = tlp_loop_start(tlp_frz_loop, frz_loop_id)
-		-- Start forces override
-		XPLMSetDatai(override_forces, 1)
-	-- if not
-	else
-		-- Stop loop
-		frz_loop_id = tlp_loop_stop(frz_loop_id)
-		-- Return aircraft target speed
-		tlp_set_spd(trg_gs, trg_hdng, trg_ptch)
-		-- Stop forces override
-		XPLMSetDatai(override_forces, 0)
 	end
 end
 
