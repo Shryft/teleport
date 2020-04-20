@@ -2,8 +2,8 @@
 ----------------------------------------------------------------------------
 Script:   Teleport
 Author:   shryft
-Version:  1.6
-Build:    2020-04-20
+Version:  1.7
+Build:    2020-04-21
 Description:
 The script gives ability to move aircraft at any location,
 set altitude, position and speed.
@@ -156,22 +156,22 @@ XPLMProbeResult XPLMProbeTerrainXYZ(
 -- DataRefs readonly
 ----------------------------------------------------------------------------
 -- Aircraft terrain altitude
-local acf_loc_agl	= XPLMFindDataRef("sim/flightmodel/position/y_agl")
+local acf_agl = XPLMFindDataRef("sim/flightmodel/position/y_agl")
 -- Aircraft ground speed
-local acf_spd_gnd	= XPLMFindDataRef("sim/flightmodel/position/groundspeed")
+local acf_gs = XPLMFindDataRef("sim/flightmodel/position/groundspeed")
 -- Air speed indicated - this takes into account air density and wind direction
-local acf_spd_air_kias	= XPLMFindDataRef("sim/flightmodel/position/indicated_airspeed")
+local acf_as = XPLMFindDataRef("sim/flightmodel/position/indicated_airspeed")
 -- Air speed true - this does not take into account air density at altitude!
-local acf_spd_air_ms	= XPLMFindDataRef("sim/flightmodel/position/true_airspeed")
+local acf_true_as = XPLMFindDataRef("sim/flightmodel/position/true_airspeed")
 
 ----------------------------------------------------------------------------
 -- DataRefs writable
 ----------------------------------------------------------------------------
 -- To avoid conficts with other scripts and have maximum performance we use XPLMDateref
 -- Aircraft location in OpenGL coordinates
-local acf_loc_x	= XPLMFindDataRef("sim/flightmodel/position/local_x")
-local acf_loc_y	= XPLMFindDataRef("sim/flightmodel/position/local_y")
-local acf_loc_z	= XPLMFindDataRef("sim/flightmodel/position/local_z")
+local acf_x	= XPLMFindDataRef("sim/flightmodel/position/local_x")
+local acf_y	= XPLMFindDataRef("sim/flightmodel/position/local_y")
+local acf_z	= XPLMFindDataRef("sim/flightmodel/position/local_z")
 
 -- Aircraft location in world coordinates
 local acf_lat = XPLMFindDataRef("sim/flightmodel/position/latitude")
@@ -180,35 +180,35 @@ local acf_elv = XPLMFindDataRef("sim/flightmodel/position/elevation")
 
 -- Aircraft position in OpenGL coordinates
 -- The pitch relative to the plane normal to the Y axis in degrees
-local acf_pos_pitch	= XPLMFindDataRef("sim/flightmodel/position/theta")
+local acf_ptch	= XPLMFindDataRef("sim/flightmodel/position/theta")
 -- The roll of the aircraft in degrees
-local acf_pos_roll	= XPLMFindDataRef("sim/flightmodel/position/phi")
+local acf_roll	= XPLMFindDataRef("sim/flightmodel/position/phi")
 -- The true heading of the aircraft in degrees from the Z axis
-local acf_pos_hdng	= XPLMFindDataRef("sim/flightmodel/position/psi")
+local acf_hdng	= XPLMFindDataRef("sim/flightmodel/position/psi")
 
 -- The MASTER copy of the aircraft's orientation when the physics model is in, units quaternion
-local acf_pos_q	= XPLMFindDataRef("sim/flightmodel/position/q")
+local acf_q	= XPLMFindDataRef("sim/flightmodel/position/q")
 
 -- Aircraft velocity in OpenGL coordinates (meter/sec)
-local acf_loc_vx	= XPLMFindDataRef("sim/flightmodel/position/local_vx")
-local acf_loc_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
-local acf_loc_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
+local acf_vx	= XPLMFindDataRef("sim/flightmodel/position/local_vx")
+local acf_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
+local acf_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
 
 -- This is the multiplier for real-time...1 = realtime, 2 = 2x, 0 = paused, etc.
 --local sim_speed	= XPLMFindDataRef("sim/time/sim_speed")
 
 -- Aircraft total weight (kg)
-local acf_weight_total = XPLMFindDataRef("sim/flightmodel/weight/m_total")
+local acf_w_total = XPLMFindDataRef("sim/flightmodel/weight/m_total")
 
 -- Aircraft force moments
-local acf_force_m_roll = XPLMFindDataRef("sim/flightmodel/forces/L_total")
-local acf_force_m_ptch = XPLMFindDataRef("sim/flightmodel/forces/M_total")
-local acf_force_m_yaw = XPLMFindDataRef("sim/flightmodel/forces/N_total")
+local acf_m_roll = XPLMFindDataRef("sim/flightmodel/forces/L_total")
+local acf_m_ptch = XPLMFindDataRef("sim/flightmodel/forces/M_total")
+local acf_m_yaw = XPLMFindDataRef("sim/flightmodel/forces/N_total")
 
 -- Aircraft total forces
-local acf_force_t_alng = XPLMFindDataRef("sim/flightmodel/forces/faxil_total")
-local acf_force_t_down = XPLMFindDataRef("sim/flightmodel/forces/fnrml_total")
-local acf_force_t_side = XPLMFindDataRef("sim/flightmodel/forces/fside_total")
+local acf_t_alng = XPLMFindDataRef("sim/flightmodel/forces/faxil_total")
+local acf_t_down = XPLMFindDataRef("sim/flightmodel/forces/fnrml_total")
+local acf_t_side = XPLMFindDataRef("sim/flightmodel/forces/fside_total")
 
 -- Override aircraft forces
 local override_forces = XPLMFindDataRef("sim/operation/override/override_forces")
@@ -219,8 +219,7 @@ local override_forces = XPLMFindDataRef("sim/operation/override/override_forces"
 -- Imgui script window
 local wnd = nil
 -- Window status
-local wnd_show_only_once = 0
-local wnd_hide_only_once = 0
+local wnd_state
 -- Window size
 local wnd_x = 480
 local wnd_y = 590
@@ -233,17 +232,17 @@ local trg_lat = 0
 local trg_lon = 0
 
 -- Altitude input variables
-local trg_alt_asl = 0
-local trg_alt_agl = 0
-local trg_alt_trn = 0
+local trg_asl = 0
+local trg_agl = 0
+local trg_trn = 0
 
 -- Aircraft position input
-local trg_pos_ptch = 0
-local trg_pos_roll = 0
-local trg_pos_hdng = 0
+local trg_ptch = 0
+local trg_roll = 0
+local trg_hdng = 0
 
 -- Aircraft groundspeed input
-local trg_spd_gnd = 0
+local trg_gs = 0
 
 -- Target files variable and paths
 local trg_local_file
@@ -271,18 +270,18 @@ local trg_save_name = ""
 local trg_status = ""
 
 -- Create ID variable for probe Y-terrain testing
-local probe_ref = ffi.new("XPLMProbeRef")
+local prb_ref = ffi.new("XPLMProbeRef")
 
 -- Create C structures for probe Y-terrain testing
-local probe_addr = ffi.new("XPLMProbeInfo_t*")
-local probe_value = ffi.new("XPLMProbeInfo_t[1]")
+local prb_addr = ffi.new("XPLMProbeInfo_t*")
+local prb_value = ffi.new("XPLMProbeInfo_t[1]")
 
 -- Create ID for flight loop callbacks
-local freeze_loop_id = ffi.new("XPLMFlightLoopID")
-local probe_loop_id = ffi.new("XPLMFlightLoopID")
+local frz_loop_id = ffi.new("XPLMFlightLoopID")
+local prb_loop_id = ffi.new("XPLMFlightLoopID")
 
 ----------------------------------------------------------------------------
--- XPLM functions
+-- Convert coordinates functions
 ----------------------------------------------------------------------------
 -- Convert world to OpenGL coordinates via XPLM
 function tlp_world_to_local(lat, lon, alt)
@@ -336,15 +335,15 @@ end
 -- Target functions
 ----------------------------------------------------------------------------
 -- Target to current aircraft state
-function get_targets()
-	get_loc()
-	get_alt()
-	get_pos()
-	get_spd()
+function tlp_get_tgt()
+	tlp_get_loc()
+	tlp_get_alt()
+	tlp_get_pos()
+	tlp_get_spd()
 end
 
 -- Target to current location
-function get_loc()
+function tlp_get_loc()
 	-- Latitude input string variable, world coordinates in degrees
 	trg_lat_str = string.format("%.6f", XPLMGetDatad(acf_lat))
 	-- Convert latitude string variable to integer
@@ -356,27 +355,23 @@ function get_loc()
 end
 
 -- Target to current altitude
-function get_alt()
+function tlp_get_alt()
 	-- read above sea altitude
-	trg_alt_asl = XPLMGetDatad(acf_elv)
-	-- read terrain level
-	--trg_alt_trn = probe_terrain(XPLMGetDatad(acf_lat), XPLMGetDatad(acf_lon), XPLMGetDatad(acf_elv))
-	-- calc above ground altitude
-	--trg_alt_agl = XPLMGetDatad(acf_elv) - trg_alt_trn
+	trg_asl = XPLMGetDatad(acf_elv)
 end
 
 -- Target to current position
-function get_pos()
+function tlp_get_pos()
 	-- read current aircraft position
-	trg_pos_ptch = XPLMGetDataf(acf_pos_pitch)
-	trg_pos_roll = XPLMGetDataf(acf_pos_roll)
-	trg_pos_hdng = XPLMGetDataf(acf_pos_hdng)
+	trg_ptch = XPLMGetDataf(acf_ptch)
+	trg_roll = XPLMGetDataf(acf_roll)
+	trg_hdng = XPLMGetDataf(acf_hdng)
 end
 
 -- Target to current airspeed
-function get_spd()
+function tlp_get_spd()
 	-- read current true airspeed
-	trg_spd_gnd = XPLMGetDataf(acf_spd_air_ms)
+	trg_gs = XPLMGetDataf(acf_true_as)
 end
 
 ----------------------------------------------------------------------------
@@ -389,11 +384,11 @@ function set_acf(lat, lon, elv,
 	-- Set inputs
 	local lat = lat or trg_lat
 	local lon = lon or trg_lon
-	local elv = elv or trg_alt_asl
-	local pitch = pitch or trg_pos_ptch
-	local roll = roll or trg_pos_roll
-	local heading = heading or trg_pos_hdng
-	local ground_speed = ground_speed or trg_spd_gnd
+	local elv = elv or trg_asl
+	local pitch = pitch or trg_ptch
+	local roll = roll or trg_roll
+	local heading = heading or trg_hdng
+	local ground_speed = ground_speed or trg_gs
 	-- Move to target state
 	set_loc(lat, lon, elv)
 	set_pos(pitch, roll, heading)
@@ -420,29 +415,29 @@ function set_loc(lat, lon, alt)
 	end
 	-- Convert and jump to target location
 	x, y, z = tlp_world_to_local(lat, lon, alt)
-	XPLMSetDatad(acf_loc_x, x)
-	XPLMSetDatad(acf_loc_y, y)
-	XPLMSetDatad(acf_loc_z, z)
+	XPLMSetDatad(acf_x, x)
+	XPLMSetDatad(acf_y, y)
+	XPLMSetDatad(acf_z, z)
 end
 
 -- Move airtcraft position
 function set_pos(pitch, roll, heading)
 	-- Move aircraft (camera) to input position via datarefs
-	XPLMSetDataf(acf_pos_pitch, pitch)
-	XPLMSetDataf(acf_pos_roll, roll)
-	XPLMSetDataf(acf_pos_hdng, heading)
+	XPLMSetDataf(acf_ptch, pitch)
+	XPLMSetDataf(acf_roll, roll)
+	XPLMSetDataf(acf_hdng, heading)
 	-- Сonvert from Euler to quaternion
 	pitch = math.pi / 360 * pitch
 	roll = math.pi / 360 * roll
 	heading = math.pi / 360 * heading
 	-- Calc position in quaternion array
-	trg_pos_q = {}
-	trg_pos_q[0] = math.cos(heading) * math.cos(pitch) * math.cos(roll) + math.sin(heading) * math.sin(pitch) * math.sin(roll)
-	trg_pos_q[1] = math.cos(heading) * math.cos(pitch) * math.sin(roll) - math.sin(heading) * math.sin(pitch) * math.cos(roll)
-	trg_pos_q[2] = math.cos(heading) * math.sin(pitch) * math.cos(roll) + math.sin(heading) * math.cos(pitch) * math.sin(roll)
-	trg_pos_q[3] = -math.cos(heading) * math.sin(pitch) * math.sin(roll) + math.sin(heading) * math.cos(pitch) * math.cos(roll)
+	trg_q = {}
+	trg_q[0] = math.cos(heading) * math.cos(pitch) * math.cos(roll) + math.sin(heading) * math.sin(pitch) * math.sin(roll)
+	trg_q[1] = math.cos(heading) * math.cos(pitch) * math.sin(roll) - math.sin(heading) * math.sin(pitch) * math.cos(roll)
+	trg_q[2] = math.cos(heading) * math.sin(pitch) * math.cos(roll) + math.sin(heading) * math.cos(pitch) * math.sin(roll)
+	trg_q[3] = -math.cos(heading) * math.sin(pitch) * math.sin(roll) + math.sin(heading) * math.cos(pitch) * math.cos(roll)
 	-- Move aircraft (physically) to input position via datarefs
-	XPLMSetDatavf(acf_pos_q, trg_pos_q, 0, 4)
+	XPLMSetDatavf(acf_q, trg_q, 0, 4)
 end
 
 -- Speed up aircraft from target position
@@ -451,19 +446,19 @@ function set_spd(speed, heading, pitch)
 	local heading = math.rad(heading)
 	local pitch = math.rad(pitch)
 	-- Direction and amount of velocity through the target position and speed
-	XPLMSetDataf(acf_loc_vx, speed * math.sin(heading) * math.cos(pitch))
-	XPLMSetDataf(acf_loc_vy, speed * math.sin(pitch))
-	XPLMSetDataf(acf_loc_vz, speed * math.cos(heading) * -1 * math.cos(pitch))
+	XPLMSetDataf(acf_vx, speed * math.sin(heading) * math.cos(pitch))
+	XPLMSetDataf(acf_vy, speed * math.sin(pitch))
+	XPLMSetDataf(acf_vz, speed * math.cos(heading) * -1 * math.cos(pitch))
 end
 
 -- Freeze an aircraft in space except time
-function freeze_loop(last_call, last_loop, counter, refcon)
+function frz_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
-	if freeze_enable then
+	if frz_enable then
 		-- Freeze aircraft at target position with 0 speed
 		set_acf(null, null, null, null, null, null, 0)
 		-- Override forces to stabilize physics
-		set_forces(trg_pos_ptch, trg_pos_roll)
+		set_forces(trg_ptch, trg_roll)
 		-- Resume loop
 		return ffi.new("float", -1)
 	-- if disabled
@@ -503,19 +498,19 @@ end
 -- Override physic forces
 function set_forces(pitch, roll)
 	-- Set aircraft force moments
-	XPLMSetDataf(acf_force_m_roll, 0)
-	XPLMSetDataf(acf_force_m_ptch, 0)
-	XPLMSetDataf(acf_force_m_yaw, 0)
+	XPLMSetDataf(acf_m_roll, 0)
+	XPLMSetDataf(acf_m_ptch, 0)
+	XPLMSetDataf(acf_m_yaw, 0)
 	-- Aircraft G force from total weight
-	local g_force = XPLMGetDataf(acf_weight_total) * 10 / 1.020587
+	local g_force = XPLMGetDataf(acf_w_total) * 10 / 1.020587
 	-- Aircraft G force vectors
 	local g_force_alng = g_force * -gyro_alng(pitch)
 	local g_force_down = g_force * gyro_down(roll) * gyro_inv(gyro_alng(pitch))
 	local g_force_side = g_force * -gyro_side(roll) * gyro_inv(gyro_alng(pitch))
 	-- Set aircraft total forces
-	XPLMSetDataf(acf_force_t_alng, g_force_alng)
-	XPLMSetDataf(acf_force_t_down, g_force_down)
-	XPLMSetDataf(acf_force_t_side, g_force_side)
+	XPLMSetDataf(acf_t_alng, g_force_alng)
+	XPLMSetDataf(acf_t_down, g_force_down)
+	XPLMSetDataf(acf_t_side, g_force_side)
 end
 
 -- Convert axis along aircraft to proportional multiplier
@@ -557,22 +552,22 @@ function gyro_inv(solution)
 end
 
 -- Create Y-terrain testing probe
-function tlp_probe_load()
-	probe_value[0].structSize = ffi.sizeof(probe_value[0])
-	probe_addr = probe_value
-	probe_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
+function tlp_prb_load()
+	prb_value[0].structSize = ffi.sizeof(prb_value[0])
+	prb_addr = prb_value
+	prb_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
 end
 
 -- Destroy Y-terrain testing probe
-function tlp_probe_unload()
-    if probe_ref ~= nil then
-        XPLM.XPLMDestroyProbe(probe_ref)    
+function tlp_prb_unload()
+    if prb_ref ~= nil then
+        XPLM.XPLMDestroyProbe(prb_ref)    
     end    
-    probe_ref = nil
+    prb_ref = nil
 end
 
 -- Test Y-terrain via probe
-function probe_terrain(lat, lon, alt)
+function prb_terrain(lat, lon, alt)
 	-- Create output
 	local terrain
 	-- Create float input for probe
@@ -582,26 +577,26 @@ function probe_terrain(lat, lon, alt)
 	-- Convert input world coordinates to local floats
 	xf[0], yf[0], zf[0] = tlp_world_to_local(lat, lon, alt)
 	-- Get terrain elevation
-	XPLM.XPLMProbeTerrainXYZ(probe_ref, xf[0], yf[0], zf[0], probe_addr)
+	XPLM.XPLMProbeTerrainXYZ(prb_ref, xf[0], yf[0], zf[0], prb_addr)
 	-- Output structure
-	probe_value = probe_addr
+	prb_value = prb_addr
 	-- Output terrain elevation
-	_, _, terrain = tlp_local_to_world(probe_value[0].locationX, probe_value[0].locationY, probe_value[0].locationZ)
+	_, _, terrain = tlp_local_to_world(prb_value[0].locationX, prb_value[0].locationY, prb_value[0].locationZ)
 	return terrain
 end
 
 -- 
-function probe_loop(last_call, last_loop, counter, refcon)
+function prb_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
 	--if wnd then
-	if tlp_show_wnd then
+	if wnd_state then
 		-- read terrain level
-		trg_alt_trn = probe_terrain(trg_lat, trg_lon, XPLMGetDatad(acf_elv))
+		trg_trn = prb_terrain(trg_lat, trg_lon, XPLMGetDatad(acf_elv))
 		-- calc above ground altitude
-		trg_alt_agl = trg_alt_asl - trg_alt_trn
+		trg_agl = trg_asl - trg_trn
 		-- prevent underground collide
-		if trg_alt_agl < 0 then
-			trg_alt_asl = trg_alt_trn
+		if trg_agl < 0 then
+			trg_asl = trg_trn
 		end
 		-- Resume loop
 		return ffi.new("float", -1)
@@ -711,11 +706,11 @@ function target(action, state, name)
 		-- Load data from array to target variables and inputs
 		trg_lat = trg_data[1]
 		trg_lon = trg_data[2]
-		trg_alt_asl = trg_data[3]
-		trg_pos_ptch = trg_data[4]
-		trg_pos_roll = trg_data[5]
-		trg_pos_hdng = trg_data[6]
-		trg_spd_gnd = trg_data[7]
+		trg_asl = trg_data[3]
+		trg_ptch = trg_data[4]
+		trg_roll = trg_data[5]
+		trg_hdng = trg_data[6]
+		trg_gs = trg_data[7]
 		trg_lat_str = tostring(trg_lat)
 		trg_lon_str = tostring(trg_lon)
 		-- Target status log
@@ -746,7 +741,7 @@ function target(action, state, name)
 		-- Go to file end
 		file:seek("end")
 		-- Target data to array
-		trg_data = {trg_lat, trg_lon, trg_alt_asl, trg_pos_ptch, trg_pos_roll, trg_pos_hdng, trg_spd_gnd, name}
+		trg_data = {trg_lat, trg_lon, trg_asl, trg_ptch, trg_roll, trg_hdng, trg_gs, name}
 		-- Write array
 		for i = 1, 8 do
 			file:write(string.format("%s ", trg_data[i]))
@@ -818,11 +813,11 @@ function tlp_build(wnd, x, y)
 		error_lon = 0xFFFFFFFF
 	end
 	-- Set freeze status color
-	local freeze_color
-	if freeze_enable then
-		freeze_color = 0xFFFFD37A
+	local frz_color
+	if frz_enable then
+		frz_color = 0xFFFFD37A
 	else
-		freeze_color = 0xFFFFFFFF
+		frz_color = 0xFFFFFFFF
 	end
 	
 	-- Type 2 title for table columns
@@ -937,10 +932,10 @@ function tlp_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
-	local changed, newInt = imgui.InputInt("                        ", trg_alt_asl)
+	local changed, newInt = imgui.InputInt("                        ", trg_asl)
 	if changed then
-		trg_alt_agl = trg_alt_agl + newInt - trg_alt_asl
-		trg_alt_asl = newInt
+		trg_agl = trg_agl + newInt - trg_asl
+		trg_asl = newInt
 	end
 	imgui.PopItemWidth()
 	
@@ -956,19 +951,19 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_loc_agl)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_agl)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
 	-- imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	-- imgui.PushItemWidth(col_size[3])
-	-- local changed, newInt = imgui.InputInt("  ", trg_alt_agl)
+	-- local changed, newInt = imgui.InputInt("  ", trg_agl)
 	-- if changed then
-		-- trg_alt_asl = trg_alt_asl + newInt - trg_alt_agl
-		-- trg_alt_agl = newInt
+		-- trg_asl = trg_asl + newInt - trg_agl
+		-- trg_agl = newInt
 	-- end
 	-- imgui.PopItemWidth()
-	imgui.TextUnformatted(string.format("%.2f", trg_alt_agl))
+	imgui.TextUnformatted(string.format("%.2f", trg_agl))
 	
 	-- MSL (mean sea level)
 	-- Variable
@@ -981,11 +976,11 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.2f", XPLMGetDatad(acf_elv) - XPLMGetDataf(acf_loc_agl)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDatad(acf_elv) - XPLMGetDataf(acf_agl)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.TextUnformatted(string.format("%.2f", trg_alt_trn))
+	imgui.TextUnformatted(string.format("%.2f", trg_trn))
 	
 	-- Type 1 title for position
 	imgui.PushStyleColor(imgui.constant.Col.Text, title_1_color)
@@ -1004,20 +999,20 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_pos_pitch)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_ptch)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("   ", trg_pos_ptch)
+	local changed, newInt = imgui.InputInt("   ", trg_ptch)
 	if changed then
 		-- set limit to max and min pitch angle according to x-plane dataref
 		if newInt < -90 or newInt > 90 then
-			trg_pos_ptch = trg_pos_ptch
+			trg_ptch = trg_ptch
 		else
-			trg_pos_ptch = newInt
+			trg_ptch = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -1033,22 +1028,22 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_pos_roll)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_roll)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("    ", trg_pos_roll)
+	local changed, newInt = imgui.InputInt("    ", trg_roll)
 	if changed then
 		-- create loop for roll target value
 		if newInt < -180 then
-			trg_pos_roll = trg_pos_roll + 359
+			trg_roll = trg_roll + 359
 		elseif newInt > 180 then
-			trg_pos_roll = trg_pos_roll - 359
+			trg_roll = trg_roll - 359
 		else
-			trg_pos_roll = newInt
+			trg_roll = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -1064,22 +1059,22 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_pos_hdng)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_hdng)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("     ", trg_pos_hdng)
+	local changed, newInt = imgui.InputInt("     ", trg_hdng)
 	if changed then
 		-- create loop for heading target value
 		if newInt < 0 then
-			trg_pos_hdng = newInt + 360
+			trg_hdng = newInt + 360
 		elseif newInt >= 360 then
-			trg_pos_hdng = newInt - 360
+			trg_hdng = newInt - 360
 		else
-			trg_pos_hdng = newInt
+			trg_hdng = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -1101,7 +1096,7 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_spd_air_kias) * 0.514))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_as) * 0.514))
 	
 	-- Indicated groundspeed (meter/sec)
 	-- Variable
@@ -1114,20 +1109,20 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_spd_gnd)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_gs)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("      ", trg_spd_gnd)
+	local changed, newInt = imgui.InputInt("      ", trg_gs)
 	if changed then
 		-- limit speed
 		if newInt < 0 then
-			trg_spd_gnd = 0
+			trg_gs = 0
 		else
-			trg_spd_gnd = newInt
+			trg_gs = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -1144,40 +1139,40 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_spd_air_ms)))
+	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_true_as)))
 	
 	-- Button that target to current aircraft status
 	imgui.TextUnformatted("")
 	if imgui.Button("TARGET", wnd_x, but_2_y) then
 		-- Get all targets
-		get_targets()
+		tlp_get_tgt()
 	end
 	-- Button that target to current location
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("location", but_1_x - indent / 2, but_1_y) then
 		-- Target to current location
-		get_loc()
+		tlp_get_loc()
 	end
 	-- Button that target to current altitude
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("altitude", but_1_x - indent / 4, but_1_y) then
 		-- Target to current altitude
-		get_alt()
+		tlp_get_alt()
 	end
 	-- Button that target to current position
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("position", but_1_x - indent / 2, but_1_y) then
 		-- Target to current position
-		get_pos()
+		tlp_get_pos()
 	end
 	-- Button that target to current airspeed
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
 	if imgui.Button("airspeed", but_1_x - indent / 4, but_1_y) then
 		-- Target to current airspeed
-		get_spd()
+		tlp_get_spd()
 	end
 	
 	-- Create input string for writing target save name
@@ -1303,11 +1298,11 @@ function tlp_build(wnd, x, y)
 	imgui.TextUnformatted(trg_status)
 	
 	-- Set color for freeze indicated status
-	imgui.PushStyleColor(imgui.constant.Col.Text, freeze_color)
+	imgui.PushStyleColor(imgui.constant.Col.Text, frz_color)
 	-- Button that freeze aircraft
 	if imgui.Button("FREEZE", wnd_x, but_2_y) then
 		-- Freeze an aircraft
-		freeze_toggle()
+		frz_toggle()
 	end
 	imgui.PopStyleColor()
 	
@@ -1327,21 +1322,21 @@ function tlp_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("to altitude", but_1_x - indent / 4, but_1_y) then
 		-- Teleport to target altitude
-		set_loc(null, null, trg_alt_asl)
+		set_loc(null, null, trg_asl)
 	end
 	-- Button that teleport to target position
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("to position", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target position
-		set_pos(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
+		set_pos(trg_ptch, trg_roll, trg_hdng)
 	end
 	-- Button that speed up to target airspeed
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
 	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
 		-- Speed up aircraft
-		set_spd(trg_spd_gnd, XPLMGetDataf(acf_pos_hdng), XPLMGetDataf(acf_pos_pitch))
+		set_spd(trg_gs, XPLMGetDataf(acf_hdng), XPLMGetDataf(acf_ptch))
 	end
 end
 
@@ -1350,6 +1345,8 @@ end
 ----------------------------------------------------------------------------
 -- Show imgui floating window
 function tlp_show()
+	-- Change window state
+	wnd_state = true
 	-- Create floating window
 	wnd = float_wnd_create(wnd_x, wnd_y, 1, true)
 	-- Set floating window title
@@ -1362,71 +1359,56 @@ function tlp_show()
 	trg_local_file = trg_load_file(trg_local_dir)
 	trg_global_file = trg_load_file(trg_global_dir)
 	-- Load probe for Y-terrain testing
-	tlp_probe_load()
+	tlp_prb_load()
 	-- Start Y-terrain probe loop
-	probe_loop_id = tlp_flight_loop_start(probe_loop, probe_loop_id)
+	prb_loop_id = tlp_flight_loop_start(prb_loop, prb_loop_id)
 	-- Get targets at start
-	get_targets()
-	-- Window appearance state
-	wnd_show_only_once = 1
-	wnd_hide_only_once = 0
+	tlp_get_tgt()
 end
 
 -- Hide imgui floating window
 function tlp_hide()
+	-- Change window state
+	wnd_state = false
 	-- Close target data files
 	trg_local_file:close()
 	trg_global_file:close()
 	-- Stop Y-terrain probe loop
-	probe_loop_id = tlp_flight_loop_stop(probe_loop_id)
+	prb_loop_id = tlp_flight_loop_stop(prb_loop_id)
 	-- Unload probe for Y-terrain testing
-	tlp_probe_unload()
-	-- Change tgggle state
-	tlp_show_wnd = false
-	-- Window appearance state
-	wnd_hide_only_once = 1
-	wnd_show_only_once = 0
+	tlp_prb_unload()
 end
 
 -- Toggle imgui floating window
 function  tlp_toggle()
-	-- Invert toggle variable
-	tlp_show_wnd = not tlp_show_wnd
-	-- If true
-	if tlp_show_wnd then
-		-- check window did not shown
-		if wnd_show_only_once == 0 then
-			-- Show window
-			tlp_show()
-		end
-	-- if false
+	-- Check window state
+	if wnd_state then
+		-- Hide window
+		float_wnd_destroy(wnd)
 	else
-		-- check window did not hiden
-		if wnd_hide_only_once == 0 then
-			-- Hide window
-			float_wnd_destroy(wnd)
-		end
+		-- Show window
+		tlp_show()
 	end
 end
 
 -- Freeze aircraft toggle
-function freeze_toggle()
+function frz_toggle()
 	-- Invert toggle variable
-	freeze_enable = not freeze_enable
+	frz_enable = not frz_enable
 	-- If true
-	if freeze_enable then
+	if frz_enable then
 		-- Get all targets
-		get_targets()
+		tlp_get_tgt()
 		-- Strat loop
-		freeze_loop_id = tlp_flight_loop_start(freeze_loop, freeze_loop_id)
+		frz_loop_id = tlp_flight_loop_start(frz_loop, frz_loop_id)
 		-- Start forces override
 		XPLMSetDatai(override_forces, 1)
 	-- if not
 	else
 		-- Stop loop
-		freeze_loop_id = tlp_flight_loop_stop(freeze_loop_id)
+		frz_loop_id = tlp_flight_loop_stop(frz_loop_id)
 		-- Return aircraft target speed
-		set_spd(trg_spd_gnd, trg_pos_hdng, trg_pos_ptch)
+		set_spd(trg_gs, trg_hdng, trg_ptch)
 		-- Stop forces override
 		XPLMSetDatai(override_forces, 0)
 	end
@@ -1445,7 +1427,7 @@ create_command("FlyWithLua/teleport/toggle",
 -- Target aircraft current state
 create_command("FlyWithLua/teleport/target",
                "Target aircraft current state",
-               "get_targets()",
+               "tlp_get_tgt()",
                "",
                "")
 
@@ -1459,7 +1441,7 @@ create_command("FlyWithLua/teleport/teleport",
 -- Teleport aircraft to target state
 create_command("FlyWithLua/teleport/freeze",
                "Freeze aircraft at current state",
-               "freeze_toggle()",
+               "frz_toggle()",
                "",
                "")
 
@@ -1467,4 +1449,4 @@ create_command("FlyWithLua/teleport/freeze",
 -- Events
 ----------------------------------------------------------------------------
 -- Get targets at start
-get_targets()
+tlp_get_tgt()
