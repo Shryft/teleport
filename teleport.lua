@@ -546,10 +546,12 @@ end
 
 -- Destroy Y-terrain testing probe
 function tlp_prb_unload()
+	-- Destroy probe reference
     if prb_ref ~= nil then
         XPLM.XPLMDestroyProbe(prb_ref)    
-    end    
-    prb_ref = nil
+    end
+	-- Clear probe reference
+    prb_ref = ffi.new("XPLMProbeRef")
 end
 
 -- Test Y-terrain via probe
@@ -596,7 +598,7 @@ end
 -- Flight loop functions
 ----------------------------------------------------------------------------
 -- Start flight loop
-function tlp_flight_loop_start(loop, id)
+function tlp_loop_start(loop, id)
 	-- Create flight loop struct
 	local loop_struct = ffi.new('XPLMCreateFlightLoop_t',
 										ffi.sizeof('XPLMCreateFlightLoop_t'),
@@ -611,7 +613,7 @@ function tlp_flight_loop_start(loop, id)
 end
 
 -- Stop flight loop
-function tlp_flight_loop_stop(id)
+function tlp_loop_stop(id)
 	-- Check flight loop id
 	if id ~= nil then
 		-- Delete flight loop id
@@ -772,7 +774,7 @@ end
 -- Imgui functions
 ----------------------------------------------------------------------------
 -- Imgui floating window main function
-function tlp_build(wnd, x, y)
+function tlp_wnd_build(wnd, x, y)
 	-- Default indent from the edge of the window
 	local indent = imgui.GetCursorPosX()
 	
@@ -1317,7 +1319,7 @@ function tlp_build(wnd, x, y)
 	-- Button that freeze aircraft
 	if imgui.Button("FREEZE", wnd_x, but_2_y) then
 		-- Freeze an aircraft
-		frz_toggle()
+		tlp_frz_tgl()
 	end
 	imgui.PopStyleColor()
 	
@@ -1359,7 +1361,7 @@ end
 -- Toggle functions
 ----------------------------------------------------------------------------
 -- Show imgui floating window
-function tlp_show()
+function tlp_wnd_show()
 	-- Change window state
 	wnd_state = true
 	-- Create floating window
@@ -1367,47 +1369,47 @@ function tlp_show()
 	-- Set floating window title
 	float_wnd_set_title(wnd, "Teleport")
 	-- Updating floating window
-	float_wnd_set_imgui_builder(wnd, "tlp_build")
+	float_wnd_set_imgui_builder(wnd, "tlp_wnd_build")
 	-- Do on close
-	float_wnd_set_onclose(wnd, "tlp_hide")
+	float_wnd_set_onclose(wnd, "tlp_wnd_hide")
 	-- Load targets data files
 	trg_local_file = trg_load_file(trg_local_dir)
 	trg_global_file = trg_load_file(trg_global_dir)
 	-- Load probe for Y-terrain testing
 	tlp_prb_load()
 	-- Start Y-terrain probe loop
-	prb_loop_id = tlp_flight_loop_start(tlp_prb_loop, prb_loop_id)
+	prb_loop_id = tlp_loop_start(tlp_prb_loop, prb_loop_id)
 	-- Get targets at start
 	tlp_get_tgt()
 end
 
 -- Hide imgui floating window
-function tlp_hide()
+function tlp_wnd_hide()
 	-- Change window state
 	wnd_state = false
 	-- Close target data files
 	trg_local_file:close()
 	trg_global_file:close()
 	-- Stop Y-terrain probe loop
-	prb_loop_id = tlp_flight_loop_stop(prb_loop_id)
+	prb_loop_id = tlp_loop_stop(prb_loop_id)
 	-- Unload probe for Y-terrain testing
 	tlp_prb_unload()
 end
 
 -- Toggle imgui floating window
-function  tlp_toggle()
+function  tlp_wnd_tgl()
 	-- Check window state
 	if wnd_state then
 		-- Hide window
 		float_wnd_destroy(wnd)
 	else
 		-- Show window
-		tlp_show()
+		tlp_wnd_show()
 	end
 end
 
 -- Freeze aircraft toggle
-function frz_toggle()
+function tlp_frz_tgl()
 	-- Invert toggle variable
 	frz_enable = not frz_enable
 	-- If true
@@ -1415,13 +1417,13 @@ function frz_toggle()
 		-- Get all targets
 		tlp_get_tgt()
 		-- Strat loop
-		frz_loop_id = tlp_flight_loop_start(tlp_frz_loop, frz_loop_id)
+		frz_loop_id = tlp_loop_start(tlp_frz_loop, frz_loop_id)
 		-- Start forces override
 		XPLMSetDatai(override_forces, 1)
 	-- if not
 	else
 		-- Stop loop
-		frz_loop_id = tlp_flight_loop_stop(frz_loop_id)
+		frz_loop_id = tlp_loop_stop(frz_loop_id)
 		-- Return aircraft target speed
 		tlp_set_spd(trg_gs, trg_hdng, trg_ptch)
 		-- Stop forces override
@@ -1435,7 +1437,7 @@ end
 -- Toggle visibility of imgui window
 create_command("FlyWithLua/teleport/toggle",
                "Toggle teleport window",
-               "tlp_toggle()",
+               "tlp_wnd_tgl()",
                "",
                "")
 
@@ -1456,7 +1458,7 @@ create_command("FlyWithLua/teleport/teleport",
 -- Teleport aircraft to target state
 create_command("FlyWithLua/teleport/freeze",
                "Freeze aircraft at current state",
-               "frz_toggle()",
+               "tlp_frz_tgl()",
                "",
                "")
 
