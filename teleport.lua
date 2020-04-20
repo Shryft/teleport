@@ -378,7 +378,7 @@ end
 -- Teleport functions
 ----------------------------------------------------------------------------
 -- Teleport aircraft
-function set_acf(lat, lon, elv,
+function tlp_set_acf(lat, lon, elv,
 				pitch, roll, heading,
 				ground_speed)
 	-- Set inputs
@@ -390,13 +390,13 @@ function set_acf(lat, lon, elv,
 	local heading = heading or trg_hdng
 	local ground_speed = ground_speed or trg_gs
 	-- Move to target state
-	set_loc(lat, lon, elv)
-	set_pos(pitch, roll, heading)
-	set_spd(ground_speed, heading, pitch)
+	tlp_set_loc(lat, lon, elv)
+	tlp_set_pos(pitch, roll, heading)
+	tlp_set_spd(ground_speed, heading, pitch)
 end
 
 -- Jump to target world location from input values
-function set_loc(lat, lon, alt)
+function tlp_set_loc(lat, lon, alt)
 	-- Create variables for converted coordinates
 	local x, y, z
 	-- Check latitude value is correct
@@ -421,7 +421,7 @@ function set_loc(lat, lon, alt)
 end
 
 -- Move airtcraft position
-function set_pos(pitch, roll, heading)
+function tlp_set_pos(pitch, roll, heading)
 	-- Move aircraft (camera) to input position via datarefs
 	XPLMSetDataf(acf_ptch, pitch)
 	XPLMSetDataf(acf_roll, roll)
@@ -441,7 +441,7 @@ function set_pos(pitch, roll, heading)
 end
 
 -- Speed up aircraft from target position
-function set_spd(speed, heading, pitch)
+function tlp_set_spd(speed, heading, pitch)
 	-- Convert input degrees to radians
 	local heading = math.rad(heading)
 	local pitch = math.rad(pitch)
@@ -451,14 +451,76 @@ function set_spd(speed, heading, pitch)
 	XPLMSetDataf(acf_vz, speed * math.cos(heading) * -1 * math.cos(pitch))
 end
 
+----------------------------------------------------------------------------
+-- Gravity functions
+----------------------------------------------------------------------------
+-- Override physic forces
+function tlp_set_frcs(pitch, roll)
+	-- Set aircraft force moments
+	XPLMSetDataf(acf_m_roll, 0)
+	XPLMSetDataf(acf_m_ptch, 0)
+	XPLMSetDataf(acf_m_yaw, 0)
+	-- Aircraft G force from total weight
+	local g_force = XPLMGetDataf(acf_w_total) * 10 / 1.020587
+	-- Aircraft G force vectors
+	local g_force_alng = g_force * -tlp_gyro_alng(pitch)
+	local g_force_down = g_force * tlp_gyro_down(roll) * tlp_gyro_inv(tlp_gyro_alng(pitch))
+	local g_force_side = g_force * -tlp_gyro_side(roll) * tlp_gyro_inv(tlp_gyro_alng(pitch))
+	-- Set aircraft total forces
+	XPLMSetDataf(acf_t_alng, g_force_alng)
+	XPLMSetDataf(acf_t_down, g_force_down)
+	XPLMSetDataf(acf_t_side, g_force_side)
+end
+
+-- Convert axis along aircraft to proportional multiplier
+function tlp_gyro_alng(axis)
+	solution = (axis / 90)
+	return solution
+end
+
+-- Convert axis across aircraft to proportional multiplier
+function tlp_gyro_side(axis)
+	if axis > 90 then
+		solution = (axis - 180) / -90
+	elseif axis < -90 then
+		solution = (axis + 180) / -90
+	else
+		solution = axis / 90
+	end
+	return solution
+end
+
+-- Convert axis perpendicular to aircraft to proportional multiplier
+function tlp_gyro_down(axis)
+	if axis >= 0 then
+		solution = (axis - 90) / -90
+	else
+		solution = (axis + 90) / 90
+	end
+	return solution
+end
+
+-- Inverse axis proportional multiplier
+function tlp_gyro_inv(solution)
+	if solution >= 0 then
+		solution = 1 - solution
+	else
+		solution = 1 + solution
+	end
+	return solution
+end
+
+----------------------------------------------------------------------------
+-- Freeze functions
+----------------------------------------------------------------------------
 -- Freeze an aircraft in space except time
-function frz_loop(last_call, last_loop, counter, refcon)
+function tlp_frz_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
 	if frz_enable then
 		-- Freeze aircraft at target position with 0 speed
-		set_acf(null, null, null, null, null, null, 0)
+		tlp_set_acf(null, null, null, null, null, null, 0)
 		-- Override forces to stabilize physics
-		set_forces(trg_ptch, trg_roll)
+		tlp_set_frcs(trg_ptch, trg_roll)
 		-- Resume loop
 		return ffi.new("float", -1)
 	-- if disabled
@@ -468,6 +530,71 @@ function frz_loop(last_call, last_loop, counter, refcon)
 	end
 end
 
+
+----------------------------------------------------------------------------
+-- Terrain probe functions
+----------------------------------------------------------------------------
+-- Create Y-terrain testing probe
+function tlp_prb_load()
+	-- Set structure size
+	prb_value[0].structSize = ffi.sizeof(prb_value[0])
+	-- probe output
+	prb_addr = prb_value
+	-- create probe ID
+	prb_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
+end
+
+-- Destroy Y-terrain testing probe
+function tlp_prb_unload()
+    if prb_ref ~= nil then
+        XPLM.XPLMDestroyProbe(prb_ref)    
+    end    
+    prb_ref = nil
+end
+
+-- Test Y-terrain via probe
+function tlp_prb_trn(lat, lon, alt)
+	-- Create output
+	local terrain
+	-- Create float input for probe
+	local xf = ffi.new("float[1]")
+	local yf = ffi.new("float[1]")
+	local zf = ffi.new("float[1]")
+	-- Convert input world coordinates to local floats
+	xf[0], yf[0], zf[0] = tlp_world_to_local(lat, lon, alt)
+	-- Get terrain elevation
+	XPLM.XPLMProbeTerrainXYZ(prb_ref, xf[0], yf[0], zf[0], prb_addr)
+	-- Output structure
+	prb_value = prb_addr
+	-- Output terrain elevation
+	_, _, terrain = tlp_local_to_world(prb_value[0].locationX, prb_value[0].locationY, prb_value[0].locationZ)
+	return terrain
+end
+
+-- Calc target terrain height every frame
+function tlp_prb_loop(last_call, last_loop, counter, refcon)
+	-- If enabled
+	if wnd_state then
+		-- read terrain level
+		trg_trn = tlp_prb_trn(trg_lat, trg_lon, XPLMGetDatad(acf_elv))
+		-- calc above ground altitude
+		trg_agl = trg_asl - trg_trn
+		-- prevent underground collide
+		if trg_agl < 0 then
+			trg_asl = trg_trn
+		end
+		-- Resume loop
+		return ffi.new("float", -1)
+	-- if disabled
+	else
+		-- Stop loop
+		return ffi.new("float", 0)
+	end
+end
+
+----------------------------------------------------------------------------
+-- Flight loop functions
+----------------------------------------------------------------------------
 -- Start flight loop
 function tlp_flight_loop_start(loop, id)
 	-- Create flight loop struct
@@ -493,118 +620,6 @@ function tlp_flight_loop_stop(id)
 	-- Clear flight loop id variable
 	id = ffi.new("XPLMFlightLoopID")
 	return id
-end
-
--- Override physic forces
-function set_forces(pitch, roll)
-	-- Set aircraft force moments
-	XPLMSetDataf(acf_m_roll, 0)
-	XPLMSetDataf(acf_m_ptch, 0)
-	XPLMSetDataf(acf_m_yaw, 0)
-	-- Aircraft G force from total weight
-	local g_force = XPLMGetDataf(acf_w_total) * 10 / 1.020587
-	-- Aircraft G force vectors
-	local g_force_alng = g_force * -gyro_alng(pitch)
-	local g_force_down = g_force * gyro_down(roll) * gyro_inv(gyro_alng(pitch))
-	local g_force_side = g_force * -gyro_side(roll) * gyro_inv(gyro_alng(pitch))
-	-- Set aircraft total forces
-	XPLMSetDataf(acf_t_alng, g_force_alng)
-	XPLMSetDataf(acf_t_down, g_force_down)
-	XPLMSetDataf(acf_t_side, g_force_side)
-end
-
--- Convert axis along aircraft to proportional multiplier
-function gyro_alng(axis)
-	solution = (axis / 90)
-	return solution
-end
-
--- Convert axis across aircraft to proportional multiplier
-function gyro_side(axis)
-	if axis > 90 then
-		solution = (axis - 180) / -90
-	elseif axis < -90 then
-		solution = (axis + 180) / -90
-	else
-		solution = axis / 90
-	end
-	return solution
-end
-
--- Convert axis perpendicular to aircraft to proportional multiplier
-function gyro_down(axis)
-	if axis >= 0 then
-		solution = (axis - 90) / -90
-	else
-		solution = (axis + 90) / 90
-	end
-	return solution
-end
-
--- Inverse axis proportional multiplier
-function gyro_inv(solution)
-	if solution >= 0 then
-		solution = 1 - solution
-	else
-		solution = 1 + solution
-	end
-	return solution
-end
-
--- Create Y-terrain testing probe
-function tlp_prb_load()
-	prb_value[0].structSize = ffi.sizeof(prb_value[0])
-	prb_addr = prb_value
-	prb_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
-end
-
--- Destroy Y-terrain testing probe
-function tlp_prb_unload()
-    if prb_ref ~= nil then
-        XPLM.XPLMDestroyProbe(prb_ref)    
-    end    
-    prb_ref = nil
-end
-
--- Test Y-terrain via probe
-function prb_terrain(lat, lon, alt)
-	-- Create output
-	local terrain
-	-- Create float input for probe
-	local xf = ffi.new("float[1]")
-	local yf = ffi.new("float[1]")
-	local zf = ffi.new("float[1]")
-	-- Convert input world coordinates to local floats
-	xf[0], yf[0], zf[0] = tlp_world_to_local(lat, lon, alt)
-	-- Get terrain elevation
-	XPLM.XPLMProbeTerrainXYZ(prb_ref, xf[0], yf[0], zf[0], prb_addr)
-	-- Output structure
-	prb_value = prb_addr
-	-- Output terrain elevation
-	_, _, terrain = tlp_local_to_world(prb_value[0].locationX, prb_value[0].locationY, prb_value[0].locationZ)
-	return terrain
-end
-
--- 
-function prb_loop(last_call, last_loop, counter, refcon)
-	-- If enabled
-	--if wnd then
-	if wnd_state then
-		-- read terrain level
-		trg_trn = prb_terrain(trg_lat, trg_lon, XPLMGetDatad(acf_elv))
-		-- calc above ground altitude
-		trg_agl = trg_asl - trg_trn
-		-- prevent underground collide
-		if trg_agl < 0 then
-			trg_asl = trg_trn
-		end
-		-- Resume loop
-		return ffi.new("float", -1)
-	-- if disabled
-	else
-		-- Stop loop
-		return ffi.new("float", 0)
-	end
 end
 
 ----------------------------------------------------------------------------
@@ -1309,34 +1324,34 @@ function tlp_build(wnd, x, y)
 	-- Button that teleports you to all input targets
 	if imgui.Button("TELEPORT", wnd_x, but_2_y) then
 		-- Teleport aircraft
-		set_acf()
+		tlp_set_acf()
 	end
 	-- Button that teleport to target location
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("to location", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target location
-		set_loc(trg_lat, trg_lon)
+		tlp_set_loc(trg_lat, trg_lon)
 	end
 	-- Button that teleport to target altitude
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("to altitude", but_1_x - indent / 4, but_1_y) then
 		-- Teleport to target altitude
-		set_loc(null, null, trg_asl)
+		tlp_set_loc(null, null, trg_asl)
 	end
 	-- Button that teleport to target position
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("to position", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target position
-		set_pos(trg_ptch, trg_roll, trg_hdng)
+		tlp_set_pos(trg_ptch, trg_roll, trg_hdng)
 	end
 	-- Button that speed up to target airspeed
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3] + indent / 4)
 	if imgui.Button("speed up", but_1_x - indent / 4, but_1_y) then
 		-- Speed up aircraft
-		set_spd(trg_gs, XPLMGetDataf(acf_hdng), XPLMGetDataf(acf_ptch))
+		tlp_set_spd(trg_gs, XPLMGetDataf(acf_hdng), XPLMGetDataf(acf_ptch))
 	end
 end
 
@@ -1361,7 +1376,7 @@ function tlp_show()
 	-- Load probe for Y-terrain testing
 	tlp_prb_load()
 	-- Start Y-terrain probe loop
-	prb_loop_id = tlp_flight_loop_start(prb_loop, prb_loop_id)
+	prb_loop_id = tlp_flight_loop_start(tlp_prb_loop, prb_loop_id)
 	-- Get targets at start
 	tlp_get_tgt()
 end
@@ -1400,7 +1415,7 @@ function frz_toggle()
 		-- Get all targets
 		tlp_get_tgt()
 		-- Strat loop
-		frz_loop_id = tlp_flight_loop_start(frz_loop, frz_loop_id)
+		frz_loop_id = tlp_flight_loop_start(tlp_frz_loop, frz_loop_id)
 		-- Start forces override
 		XPLMSetDatai(override_forces, 1)
 	-- if not
@@ -1408,7 +1423,7 @@ function frz_toggle()
 		-- Stop loop
 		frz_loop_id = tlp_flight_loop_stop(frz_loop_id)
 		-- Return aircraft target speed
-		set_spd(trg_gs, trg_hdng, trg_ptch)
+		tlp_set_spd(trg_gs, trg_hdng, trg_ptch)
 		-- Stop forces override
 		XPLMSetDatai(override_forces, 0)
 	end
@@ -1434,7 +1449,7 @@ create_command("FlyWithLua/teleport/target",
 -- Teleport aircraft to target state
 create_command("FlyWithLua/teleport/teleport",
                "Teleport aircraft to target state",
-               "set_acf()",
+               "tlp_set_acf()",
                "",
                "")
 
