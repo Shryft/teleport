@@ -485,6 +485,7 @@ function tlp_flight_loop_start(loop, id)
 	id = XPLM.XPLMCreateFlightLoop(loop_struct)
 	-- Start flight loop now
 	XPLM.XPLMScheduleFlightLoop(id, -1, 1)
+	return id
 end
 
 -- Stop flight loop
@@ -495,7 +496,8 @@ function tlp_flight_loop_stop(id)
 		XPLM.XPLMDestroyFlightLoop(id)
 	end
 	-- Clear flight loop id variable
-	id = nil
+	id = ffi.new("XPLMFlightLoopID")
+	return id
 end
 
 -- Override physic forces
@@ -591,6 +593,7 @@ end
 -- 
 function probe_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
+	--if wnd then
 	if tlp_show_wnd then
 		-- read terrain level
 		trg_alt_trn = probe_terrain(trg_lat, trg_lon, XPLMGetDatad(acf_elv))
@@ -1347,37 +1350,42 @@ end
 ----------------------------------------------------------------------------
 -- Show imgui floating window
 function tlp_show()
-	-- Load targets data files
-	trg_local_file = trg_load_file(trg_local_dir)
-	trg_global_file = trg_load_file(trg_global_dir)
 	-- Create floating window
 	wnd = float_wnd_create(wnd_x, wnd_y, 1, true)
 	-- Set floating window title
 	float_wnd_set_title(wnd, "Teleport")
 	-- Updating floating window
 	float_wnd_set_imgui_builder(wnd, "tlp_build")
+	-- Do on close
+	float_wnd_set_onclose(wnd, "tlp_hide")
+	-- Load targets data files
+	trg_local_file = trg_load_file(trg_local_dir)
+	trg_global_file = trg_load_file(trg_global_dir)
 	-- Load probe for Y-terrain testing
 	tlp_probe_load()
 	-- Start Y-terrain probe loop
-	tlp_flight_loop_start(probe_loop, probe_loop_id)
+	probe_loop_id = tlp_flight_loop_start(probe_loop, probe_loop_id)
 	-- Get targets at start
 	get_targets()
+	-- Window appearance state
+	wnd_show_only_once = 1
+	wnd_hide_only_once = 0
 end
 
 -- Hide imgui floating window
 function tlp_hide()
-	-- If the window is showed
-    if wnd then
-		-- Destroy window
-        float_wnd_destroy(wnd)
-		-- Close target data files
-		trg_local_file:close()
-		trg_global_file:close()
-		-- Unload probe for Y-terrain testing
-		tlp_probe_unload()
-		-- Stop Y-terrain probe loop
-		tlp_flight_loop_stop(probe_loop_id)
-    end
+	-- Close target data files
+	trg_local_file:close()
+	trg_global_file:close()
+	-- Stop Y-terrain probe loop
+	probe_loop_id = tlp_flight_loop_stop(probe_loop_id)
+	-- Unload probe for Y-terrain testing
+	tlp_probe_unload()
+	-- Change tgggle state
+	tlp_show_wnd = false
+	-- Window appearance state
+	wnd_hide_only_once = 1
+	wnd_show_only_once = 0
 end
 
 -- Toggle imgui floating window
@@ -1388,17 +1396,15 @@ function  tlp_toggle()
 	if tlp_show_wnd then
 		-- check window did not shown
 		if wnd_show_only_once == 0 then
+			-- Show window
 			tlp_show()
-			wnd_show_only_once = 1
-			wnd_hide_only_once = 0
 		end
 	-- if false
 	else
 		-- check window did not hiden
 		if wnd_hide_only_once == 0 then
-			tlp_hide()
-			wnd_hide_only_once = 1
-			wnd_show_only_once = 0
+			-- Hide window
+			float_wnd_destroy(wnd)
 		end
 	end
 end
@@ -1412,25 +1418,19 @@ function freeze_toggle()
 		-- Get all targets
 		get_targets()
 		-- Strat loop
-		tlp_flight_loop_start(freeze_loop, freeze_loop_id)
+		freeze_loop_id = tlp_flight_loop_start(freeze_loop, freeze_loop_id)
 		-- Start forces override
 		XPLMSetDatai(override_forces, 1)
 	-- if not
 	else
 		-- Stop loop
-		tlp_flight_loop_stop(freeze_loop_id)
+		freeze_loop_id = tlp_flight_loop_stop(freeze_loop_id)
 		-- Return aircraft target speed
 		set_spd(trg_spd_gnd, trg_pos_hdng, trg_pos_ptch)
 		-- Stop forces override
 		XPLMSetDatai(override_forces, 0)
 	end
 end
-
-----------------------------------------------------------------------------
--- Macros
-----------------------------------------------------------------------------
--- Toggle window macro
-add_macro("Imgui Teleport: open/close", "tlp_show()", "tlp_hide()", "deactivate")
 
 ----------------------------------------------------------------------------
 -- Custom commands
@@ -1468,22 +1468,3 @@ create_command("FlyWithLua/teleport/freeze",
 ----------------------------------------------------------------------------
 -- Get targets at start
 get_targets()
-
---DEBUG
-function dev_log()
-	local freeze_loop_str = tostring(freeze_loop)
-	local probe_loop_str = tostring(probe_loop)
-	local freeze_loop_id_str = tostring(freeze_loop_id)
-	local probe_loop_id_str = tostring(probe_loop_id)
-	logMsg("")
-	logMsg("freeze_loop")
-	logMsg(freeze_loop_str)
-	logMsg("probe_loop")
-	logMsg(probe_loop_str)
-	logMsg("freeze_loop_id")
-	logMsg(freeze_loop_id_str)
-	logMsg("probe_loop_id")
-	logMsg(probe_loop_id_str)
-end
-
-do_every_frame("dev_log()")
