@@ -2,8 +2,8 @@
 ----------------------------------------------------------------------------
 Script:   Teleport
 Author:   shryft
-Version:  1.5
-Build:    2020-04-16
+Version:  1.6
+Build:    2020-04-20
 Description:
 The script gives ability to move aircraft at any location,
 set altitude, position and speed.
@@ -53,6 +53,8 @@ local XPLM = ffi.load(XPLMlib)
 
 -- load xplm functions
 ffi.cdef[[
+// Convert coordinates
+
 void XPLMWorldToLocal(
 	double inLatitude,    
 	double inLongitude,    
@@ -60,14 +62,25 @@ void XPLMWorldToLocal(
 	double *outX,    
 	double *outY,    
 	double *outZ);
+	
+void XPLMLocalToWorld(
+	double inX,
+	double inY,
+	double inZ,
+	double *outLatitude,
+	double *outLongitude,
+	double *outAltitude);
+
+// Flight loop callback
+
+typedef int XPLMFlightLoopPhaseType;
 
 enum {
-     xplm_FlightLoop_Phase_BeforeFlightModel = 0
-    ,xplm_FlightLoop_Phase_AfterFlightModel = 1
+	xplm_FlightLoop_Phase_BeforeFlightModel = 0,
+	xplm_FlightLoop_Phase_AfterFlightModel = 1
 };
 
 typedef void *XPLMFlightLoopID;
-typedef int XPLMFlightLoopPhaseType;
 
 typedef float (*XPLMFlightLoop_f)(
 	float inElapsedSinceLastCall,
@@ -92,6 +105,51 @@ void XPLMScheduleFlightLoop(
 	XPLMFlightLoopID inFlightLoopID,
 	float inInterval,
 	int inRelativeToNow);
+
+// Terrain Y-Testing
+
+typedef int XPLMProbeType;
+
+enum {
+	xplm_ProbeY = 0
+};
+
+typedef int XPLMProbeResult;
+
+enum {
+	xplm_ProbeHitTerrain = 0,
+	xplm_ProbeError = 1,
+	xplm_ProbeMissed = 2
+};
+
+typedef void * XPLMProbeRef;
+
+typedef struct {
+	int structSize;
+	float locationX;
+	float locationY;
+	float locationZ;
+	float normalX;
+	float normalY;
+	float normalZ;
+	float velocityX;
+	float velocityY;
+	float velocityZ;
+	int is_wet;
+} XPLMProbeInfo_t;
+
+XPLMProbeRef XPLMCreateProbe(
+	XPLMProbeType inProbeType);
+
+void XPLMDestroyProbe(
+	XPLMProbeRef inProbe);
+
+XPLMProbeResult XPLMProbeTerrainXYZ(
+	XPLMProbeRef inProbe,
+	float inX,
+	float inY,
+	float inZ,
+	XPLMProbeInfo_t *outInfo);
 ]]
 
 ----------------------------------------------------------------------------
@@ -114,6 +172,11 @@ local acf_spd_air_ms	= XPLMFindDataRef("sim/flightmodel/position/true_airspeed")
 local acf_loc_x	= XPLMFindDataRef("sim/flightmodel/position/local_x")
 local acf_loc_y	= XPLMFindDataRef("sim/flightmodel/position/local_y")
 local acf_loc_z	= XPLMFindDataRef("sim/flightmodel/position/local_z")
+
+-- Aircraft location in world coordinates
+local acf_lat = XPLMFindDataRef("sim/flightmodel/position/latitude")
+local acf_lon = XPLMFindDataRef("sim/flightmodel/position/longitude")
+local acf_elv = XPLMFindDataRef("sim/flightmodel/position/elevation")
 
 -- Aircraft position in OpenGL coordinates
 -- The pitch relative to the plane normal to the Y axis in degrees
@@ -155,32 +218,32 @@ local override_forces = XPLMFindDataRef("sim/operation/override/override_forces"
 ----------------------------------------------------------------------------
 -- Imgui script window
 local wnd = nil
--- Window shown
+-- Window status
 local wnd_show_only_once = 0
--- Window hidden
 local wnd_hide_only_once = 0
--- Window width
+-- Window size
 local wnd_x = 480
--- Window height
-local wnd_y = 585
+local wnd_y = 587
 
--- Latitude input string variable, world coordinates in degrees
-local trg_loc_lat_str = ""
--- Convert latitude string variable to integer
-local trg_loc_lat = 0
--- Longitude input variable, world coordinates in degrees, string
-local trg_loc_lon_str = ""
--- Convert longitude string variable to integer
-local trg_loc_lon = 0
+-- Input string variables for targeting world coordinates
+local trg_lat_str = ""
+local trg_lon_str = ""
+-- World coordinates input variables
+local trg_lat = 0
+local trg_lon = 0
 
--- Altitude input variable in meters
-local trg_loc_alt = 0
+-- Altitude input mode
+local trg_alt_mode = {"ASL", "AGL"}
+local trg_alt_mode_select = 1
 
--- Aircraft position input pitch
-local trg_pos_pitch = 0
--- Aircraft position input roll
+-- Altitude input variables
+local trg_alt_asl = 0
+local trg_alt_agl = 0
+local trg_alt_trn = 0
+
+-- Aircraft position input
+local trg_pos_ptch = 0
 local trg_pos_roll = 0
--- Aircraft position input heading
 local trg_pos_hdng = 0
 
 -- Aircraft groundspeed input
@@ -214,31 +277,62 @@ local trg_status = ""
 -- Create ID variable for flight loop callback
 local freeze_loop_id = ffi.new("XPLMFlightLoopID")
 
+-- Create ID variable for probe Y-terrain testing
+local probe_ref = ffi.new("XPLMProbeRef")
+
+-- Create C structures for probe Y-terrain testing
+local probe_addr = ffi.new("XPLMProbeInfo_t*")
+local probe_value = ffi.new("XPLMProbeInfo_t[1]")
+
 ----------------------------------------------------------------------------
 -- XPLM functions
 ----------------------------------------------------------------------------
--- Convert world coordinates to OpenGL via XPLM
-function world_to_local(lat, lon, alt)
+-- Convert world to OpenGL coordinates via XPLM
+function tlp_world_to_local(lat, lon, alt)
 	-- Create input variables
 	local lat = lat or 0
 	local lon = lon or 0
 	local alt = alt or 0
-	-- Create local double variables for OpenGL coordinates
-	local x_dbl = ffi.new("double[1]")
-	local y_dbl = ffi.new("double[1]")
-	local z_dbl = ffi.new("double[1]")
-	-- Create local empty variables for output
+	-- Create double for OpenGL coordinates
+	local xd = ffi.new("double[1]")
+	local yd = ffi.new("double[1]")
+	local zd = ffi.new("double[1]")
+	-- Create output numbers
 	local x
 	local y
 	local z
 	-- Event XPLM Graphic function XPLMWorldToLocal
-	XPLM.XPLMWorldToLocal(lat, lon, alt, x_dbl, y_dbl, z_dbl)
-	-- Chenge convert doubles to integers
-	x = x_dbl[0]
-	y = y_dbl[0]
-	z = z_dbl[0]
-	-- Return converted output OpenGL coordinates
+	XPLM.XPLMWorldToLocal(lat, lon, alt, xd, yd, zd)
+	-- Change output doubles to numbers
+	x = xd[0]
+	y = yd[0]
+	z = zd[0]
+	-- Return converted coordinates
 	return x, y, z
+end
+
+-- Convert OpenGL to world coordinates via XPLM
+function tlp_local_to_world(x, y, z)
+	-- Create input variables
+	local x = x or 0
+	local y = y or 0
+	local z = z or 0
+	-- Create double for world coordinates
+	local latd = ffi.new("double[1]")
+	local lond = ffi.new("double[1]")
+	local altd = ffi.new("double[1]")
+	-- Create output numbers
+	local lat
+	local lon
+	local alt
+	-- Event XPLM Graphic function XPLMLocalToWorld
+	XPLM.XPLMLocalToWorld(x, y, z, latd, lond, altd)
+	-- Change output doubles to numbers
+	lat = latd[0]
+	lon = lond[0]
+	alt = altd[0]
+	-- Return converted coordinates
+	return lat, lon, alt
 end
 
 ----------------------------------------------------------------------------
@@ -247,25 +341,29 @@ end
 -- Target to current location
 function get_loc()
 	-- Latitude input string variable, world coordinates in degrees
-	trg_loc_lat_str = string.format("%.6f", LATITUDE)
+	trg_lat_str = string.format("%.6f", XPLMGetDatad(acf_lat))
 	-- Convert latitude string variable to integer
-	trg_loc_lat = tonumber(trg_loc_lat_str)
+	trg_lat = tonumber(trg_lat_str)
 	-- Longitude input variable, world coordinates in degrees, string
-	trg_loc_lon_str = string.format("%.6f", LONGITUDE)
+	trg_lon_str = string.format("%.6f", XPLMGetDatad(acf_lon))
 	-- Convert longitude string variable to integer
-	trg_loc_lon = tonumber(trg_loc_lon_str)
+	trg_lon = tonumber(trg_lon_str)
 end
 
 -- Target to current altitude
 function get_alt()
-	-- read current alt
-	trg_loc_alt = ELEVATION
+	-- read above sea altitude
+	trg_alt_asl = XPLMGetDatad(acf_elv)
+	-- read terrain level
+	trg_alt_trn = probe_terrain(XPLMGetDatad(acf_lat), XPLMGetDatad(acf_lon), XPLMGetDatad(acf_elv))
+	-- calc above ground altitude
+	trg_alt_agl = XPLMGetDatad(acf_elv) - trg_alt_trn
 end
 
 -- Target to current position
 function get_pos()
 	-- read current aircraft position
-	trg_pos_pitch = XPLMGetDataf(acf_pos_pitch)
+	trg_pos_ptch = XPLMGetDataf(acf_pos_pitch)
 	trg_pos_roll = XPLMGetDataf(acf_pos_roll)
 	trg_pos_hdng = XPLMGetDataf(acf_pos_hdng)
 end
@@ -286,19 +384,19 @@ function jump(lat, lon, alt)
 	-- Check latitude value is correct
 	if lat == nil or lat < -90 or lat > 90 then
 		-- if not, apply current latitude location
-		lat = LATITUDE
+		lat = XPLMGetDatad(acf_lat)
 	end
 	-- Check longitude value is correct
 	if lon == nil or lon < -180 or lon > 180 then
 		-- if not, apply current longitude location
-		lon = LONGITUDE
+		lon = XPLMGetDatad(acf_lon)
 	end
 	-- Check altitude value is correct
-	if alt == nil or alt < 0 or alt > 20000 then
-		alt = ELEVATION
+	if alt == nil or alt < 0 or alt > 37650 then
+		alt = XPLMGetDatad(acf_elv)
 	end
 	-- Convert and jump to target location
-	x, y, z = world_to_local(lat, lon, alt)
+	x, y, z = tlp_world_to_local(lat, lon, alt)
 	XPLMSetDatad(acf_loc_x, x)
 	XPLMSetDatad(acf_loc_y, y)
 	XPLMSetDatad(acf_loc_z, z)
@@ -340,11 +438,11 @@ function freeze_loop(last_call, last_loop, counter, refcon)
 	-- If enabled
 	if freeze_enable then
 		-- Freeze aircraft at target position with 0 speed
-		jump(trg_loc_lat, trg_loc_lon, trg_loc_alt)
-		move(trg_pos_pitch, trg_pos_roll, trg_pos_hdng)
-		spd_up(0, trg_pos_hdng, trg_pos_pitch)
+		jump(trg_lat, trg_lon, trg_alt_asl)
+		move(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
+		spd_up(0, trg_pos_hdng, trg_pos_ptch)
 		-- Override forces to stabilize physics
-		set_forces(trg_pos_pitch, trg_pos_roll)
+		set_forces(trg_pos_ptch, trg_pos_roll)
 		-- Resume loop
 		return ffi.new("float", -1)
 	-- if disabled
@@ -408,6 +506,39 @@ function gyro_inv(solution)
 		solution = 1 + solution
 	end
 	return solution
+end
+
+-- Create Y-terrain testing probe
+function tlp_probe_load()
+	probe_value[0].structSize = ffi.sizeof(probe_value[0])
+	probe_addr = probe_value
+	probe_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
+end
+
+function tlp_probe_unload()
+    if probe_ref ~= nil then
+        XPLM.XPLMDestroyProbe(probe_ref)    
+    end    
+    probe_ref = nil
+end
+
+-- Test Y-terrain via probe
+function probe_terrain(lat, lon, alt)
+	-- Create output
+	local terrain
+	-- Create float input for probe
+	local xf = ffi.new("float[1]")
+	local yf = ffi.new("float[1]")
+	local zf = ffi.new("float[1]")
+	-- Convert input world coordinates to local floats
+	xf[0], yf[0], zf[0] = tlp_world_to_local(lat, lon, alt)
+	-- Get terrain elevation
+	XPLM.XPLMProbeTerrainXYZ(probe_ref, xf[0], yf[0], zf[0], probe_addr)
+	-- Output structure
+	probe_value = probe_addr
+	-- Output terrain elevation
+	_, _, terrain = tlp_local_to_world(probe_value[0].locationX, probe_value[0].locationY, probe_value[0].locationZ)
+	return terrain
 end
 
 ----------------------------------------------------------------------------
@@ -507,15 +638,15 @@ function target(action, state, name)
 			trg_data[i] = tonumber(trg_data[i])
 		end
 		-- Load data from array to target variables and inputs
-		trg_loc_lat = trg_data[1]
-		trg_loc_lon = trg_data[2]
-		trg_loc_alt = trg_data[3]
-		trg_pos_pitch = trg_data[4]
+		trg_lat = trg_data[1]
+		trg_lon = trg_data[2]
+		trg_alt_asl = trg_data[3]
+		trg_pos_ptch = trg_data[4]
 		trg_pos_roll = trg_data[5]
 		trg_pos_hdng = trg_data[6]
 		trg_spd_gnd = trg_data[7]
-		trg_loc_lat_str = tostring(trg_loc_lat)
-		trg_loc_lon_str = tostring(trg_loc_lon)
+		trg_lat_str = tostring(trg_lat)
+		trg_lon_str = tostring(trg_lon)
 		-- Target status log
 		trg_status = "Loaded '" .. trg_data[8] .. "' from " .. state
 	-- Delete target data
@@ -544,7 +675,7 @@ function target(action, state, name)
 		-- Go to file end
 		file:seek("end")
 		-- Target data to array
-		trg_data = {trg_loc_lat, trg_loc_lon, trg_loc_alt, trg_pos_pitch, trg_pos_roll, trg_pos_hdng, trg_spd_gnd, name}
+		trg_data = {trg_lat, trg_lon, trg_alt_asl, trg_pos_ptch, trg_pos_roll, trg_pos_hdng, trg_spd_gnd, name}
 		-- Write array
 		for i = 1, 8 do
 			file:write(string.format("%s ", trg_data[i]))
@@ -603,14 +734,14 @@ function tlp_build(wnd, x, y)
 	-- Set error message color
 	-- Wrong latitude
 	local error_lat
-	if trg_loc_lat == nil or trg_loc_lat < -90 or trg_loc_lat > 90 then
+	if trg_lat == nil or trg_lat < -90 or trg_lat > 90 then
 		error_lat = 0xFF0000FF
 	else
 		error_lat = 0xFFFFFFFF
 	end
 	-- Wrong longitude
 	local error_lon
-	if trg_loc_lon == nil or trg_loc_lon < -180 or trg_loc_lon > 180 then
+	if trg_lon == nil or trg_lon < -180 or trg_lon > 180 then
 		error_lon = 0xFF0000FF
 	else
 		error_lon = 0xFFFFFFFF
@@ -647,15 +778,15 @@ function tlp_build(wnd, x, y)
 	-- Latitude
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
-	imgui.TextUnformatted("N")
+	imgui.TextUnformatted("N (latitude)")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
-	imgui.TextUnformatted("latitude")
+	imgui.TextUnformatted("degrees")
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%f", LATITUDE))
+	imgui.TextUnformatted(string.format("%f", XPLMGetDatad(acf_lat)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -663,16 +794,16 @@ function tlp_build(wnd, x, y)
 	imgui.PushItemWidth(col_size[3])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lat)
 	-- Create input string for latitude
-    local changed, newVal = imgui.InputText("", trg_loc_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
+    local changed, newVal = imgui.InputText("", trg_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
     if changed then
-        trg_loc_lat_str = newVal
+        trg_lat_str = newVal
 		-- Check for an empty value
-		if trg_loc_lat_str == "" then
-			trg_loc_lat = nil
+		if trg_lat_str == "" then
+			trg_lat = nil
 		else
 			-- if not, convert to integer
-			trg_loc_lat = tonumber(trg_loc_lat_str)
+			trg_lat = tonumber(trg_lat_str)
 		end
     end
 	imgui.PopStyleColor()
@@ -681,15 +812,15 @@ function tlp_build(wnd, x, y)
 	-- Longitude
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
-	imgui.TextUnformatted("E")
+	imgui.TextUnformatted("E (longitude)")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
-	imgui.TextUnformatted("longitude")
+	imgui.TextUnformatted("degrees")
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%f", LONGITUDE))
+	imgui.TextUnformatted(string.format("%f", XPLMGetDatad(acf_lon)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
@@ -697,16 +828,16 @@ function tlp_build(wnd, x, y)
 	imgui.PushItemWidth(col_size[3])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lon)
 	-- Create input string for longitude
-    local changed, newVal = imgui.InputText(" ", trg_loc_lon_str, 10)
+    local changed, newVal = imgui.InputText(" ", trg_lon_str, 10)
 	-- If input value is changed by user
     if changed then
-        trg_loc_lon_str = newVal
+        trg_lon_str = newVal
 		-- Check for an empty value
-		if trg_loc_lon_str == "" then
-			trg_loc_lon = nil
+		if trg_lon_str == "" then
+			trg_lon = nil
 		else
 			-- if not, convert to integer
-			trg_loc_lon = tonumber(trg_loc_lon_str)
+			trg_lon = tonumber(trg_lon_str)
 		end
     end
 	imgui.PopStyleColor()
@@ -721,7 +852,7 @@ function tlp_build(wnd, x, y)
 	-- ASL (meters above sea level)
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
-	imgui.TextUnformatted("ASL")
+	imgui.TextUnformatted("Above Sea Level")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
@@ -729,24 +860,24 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.2f", ELEVATION))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDatad(acf_elv)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
-	-- Target input for altitude above sea
-	local changed, newInt = imgui.InputInt("  ", trg_loc_alt)
+	local changed, newInt = imgui.InputInt("                        ", trg_alt_asl)
 	if changed then
-		trg_loc_alt = newInt
+		trg_alt_agl = trg_alt_agl + newInt - trg_alt_asl
+		trg_alt_asl = newInt
 	end
 	imgui.PopItemWidth()
 	
 	-- AGL (meters above ground level)
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
-	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.TextUnformatted("AGL")
+	imgui.SetCursorPosY(imgui.GetCursorPosY())
+	imgui.TextUnformatted("Above Gnd Level")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
@@ -755,11 +886,22 @@ function tlp_build(wnd, x, y)
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_loc_agl)))
+	-- Target
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[3])
+	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
+	imgui.PushItemWidth(col_size[3])
+	local changed, newInt = imgui.InputInt("  ", trg_alt_agl)
+	if changed then
+		trg_alt_asl = trg_alt_asl + newInt - trg_alt_agl
+		trg_alt_agl = newInt
+	end
+	imgui.PopItemWidth()
 	
 	-- MSL (mean sea level)
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
-	imgui.TextUnformatted("MSL")
+	imgui.TextUnformatted("Mean Sea Level")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
@@ -767,7 +909,13 @@ function tlp_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2])
-	imgui.TextUnformatted(string.format("%.2f", ELEVATION - XPLMGetDataf(acf_loc_agl)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDatad(acf_elv) - XPLMGetDataf(acf_loc_agl)))
+	-- Target
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[3])
+	--imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
+	--imgui.PushItemWidth(col_size[3])
+	imgui.TextUnformatted(string.format("%.2f", trg_alt_trn))
 	
 	-- Type 1 title for position
 	imgui.PushStyleColor(imgui.constant.Col.Text, title_1_color)
@@ -793,13 +941,13 @@ function tlp_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt("   ", trg_pos_pitch)
+	local changed, newInt = imgui.InputInt("   ", trg_pos_ptch)
 	if changed then
 		-- set limit to max and min pitch angle according to x-plane dataref
 		if newInt < -90 or newInt > 90 then
-			trg_pos_pitch = trg_pos_pitch
+			trg_pos_ptch = trg_pos_ptch
 		else
-			trg_pos_pitch = newInt
+			trg_pos_ptch = newInt
 		end
 	end
 	imgui.PopItemWidth()
@@ -875,7 +1023,7 @@ function tlp_build(wnd, x, y)
 	-- Indicated airspeed (meter/sec)
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
-	imgui.TextUnformatted("AS")
+	imgui.TextUnformatted("Airspeed")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
@@ -888,7 +1036,7 @@ function tlp_build(wnd, x, y)
 	-- Indicated groundspeed (meter/sec)
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
-	imgui.TextUnformatted("GS")
+	imgui.TextUnformatted("Ground speed")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
@@ -918,7 +1066,7 @@ function tlp_build(wnd, x, y)
 	-- Variable
 	imgui.SetCursorPosX(indent + col_x[0])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.TextUnformatted("TAS")
+	imgui.TextUnformatted("True airspeed")
 	-- Units
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
@@ -1099,29 +1247,29 @@ function tlp_build(wnd, x, y)
 	-- Button that teleports you to all input targets
 	if imgui.Button("TELEPORT", wnd_x, but_2_y) then
 		-- Teleport aircraft
-		jump(trg_loc_lat, trg_loc_lon, trg_loc_alt)
-		move(trg_pos_pitch, trg_pos_roll, trg_pos_hdng)
-		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_pitch)
+		jump(trg_lat, trg_lon, trg_alt_asl)
+		move(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
+		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_ptch)
 	end
 	-- Button that teleport to target location
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("to location", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target location
-		jump(trg_loc_lat, trg_loc_lon)
+		jump(trg_lat, trg_lon)
 	end
 	-- Button that teleport to target altitude
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[1])
 	if imgui.Button("to altitude", but_1_x - indent / 4, but_1_y) then
 		-- Teleport to target altitude
-		jump(null, null, trg_loc_alt)
+		jump(null, null, trg_alt_asl)
 	end
 	-- Button that teleport to target position
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button("to position", but_1_x - indent / 2, but_1_y) then
 		-- Teleport to target position
-		move(trg_pos_pitch, trg_pos_roll, trg_pos_hdng)
+		move(trg_pos_ptch, trg_pos_roll, trg_pos_hdng)
 	end
 	-- Button that speed up to target airspeed
 	imgui.SameLine()
@@ -1146,6 +1294,13 @@ function tlp_show()
 	float_wnd_set_title(wnd, "Teleport")
 	-- Updating floating window
 	float_wnd_set_imgui_builder(wnd, "tlp_build")
+	-- Create terrain probe
+	probe_ref = XPLM.XPLMCreateProbe(XPLM.xplm_ProbeY)
+	-- Get targets at start
+	get_loc()
+	get_alt()
+	get_pos()
+	get_spd()
 end
 
 -- Hide imgui floating window
@@ -1157,6 +1312,8 @@ function tlp_hide()
 		-- Close target data files
 		trg_local_file:close()
 		trg_global_file:close()
+		-- Create terrain probe
+		XPLM.XPLMDestroyProbe(probe_ref)
     end
 end
 
@@ -1211,7 +1368,7 @@ function freeze_toggle()
 		-- Delete flight loop id
 		XPLM.XPLMDestroyFlightLoop(freeze_loop_id)
 		-- Return aircraft target speed
-		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_pitch)
+		spd_up(trg_spd_gnd, trg_pos_hdng, trg_pos_ptch)
 		-- Stop forces override
 		XPLMSetDatai(override_forces, 0)
 	end
@@ -1232,12 +1389,9 @@ create_command("FlyWithLua/teleport/toggle",
                "tlp_toggle()",
                "",
                "")
-
+			   
 ----------------------------------------------------------------------------
 -- Events
 ----------------------------------------------------------------------------
--- Get targets at start
-get_loc()
-get_alt()
-get_pos()
-get_spd()
+-- Load probe for Y-terrain testing
+tlp_probe_load()
