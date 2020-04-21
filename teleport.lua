@@ -62,7 +62,7 @@ void XPLMWorldToLocal(
 	double *outX,    
 	double *outY,    
 	double *outZ);
-	
+
 void XPLMLocalToWorld(
 	double inX,
 	double inY,
@@ -106,7 +106,7 @@ void XPLMScheduleFlightLoop(
 	float inInterval,
 	int inRelativeToNow);
 
-// Terrain Y-Testing
+// Probe Y-terrain
 
 typedef int XPLMProbeType;
 
@@ -167,51 +167,41 @@ local acf_true_as = XPLMFindDataRef("sim/flightmodel/position/true_airspeed")
 ----------------------------------------------------------------------------
 -- DataRefs writable
 ----------------------------------------------------------------------------
--- To avoid conficts with other scripts and have maximum performance we use XPLMDateref
--- Aircraft location in OpenGL coordinates
+-- Aircraft location in local (OpenGL) coordinates
 local acf_x	= XPLMFindDataRef("sim/flightmodel/position/local_x")
 local acf_y	= XPLMFindDataRef("sim/flightmodel/position/local_y")
 local acf_z	= XPLMFindDataRef("sim/flightmodel/position/local_z")
-
 -- Aircraft location in world coordinates
 local acf_lat = XPLMFindDataRef("sim/flightmodel/position/latitude")
 local acf_lon = XPLMFindDataRef("sim/flightmodel/position/longitude")
 local acf_elv = XPLMFindDataRef("sim/flightmodel/position/elevation")
-
--- Aircraft position in OpenGL coordinates
+-- Aircraft position
 -- The pitch relative to the plane normal to the Y axis in degrees
 local acf_ptch	= XPLMFindDataRef("sim/flightmodel/position/theta")
 -- The roll of the aircraft in degrees
 local acf_roll	= XPLMFindDataRef("sim/flightmodel/position/phi")
 -- The true heading of the aircraft in degrees from the Z axis
 local acf_hdng	= XPLMFindDataRef("sim/flightmodel/position/psi")
-
 -- The MASTER copy of the aircraft's orientation when the physics model is in, units quaternion
 local acf_q	= XPLMFindDataRef("sim/flightmodel/position/q")
-
 -- Aircraft velocity in OpenGL coordinates (meter/sec)
 local acf_vx	= XPLMFindDataRef("sim/flightmodel/position/local_vx")
 local acf_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
 local acf_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
-
--- This is the multiplier for real-time...1 = realtime, 2 = 2x, 0 = paused, etc.
---local sim_speed	= XPLMFindDataRef("sim/time/sim_speed")
-
--- Aircraft total weight (kg)
-local acf_w_total = XPLMFindDataRef("sim/flightmodel/weight/m_total")
-
 -- Aircraft force moments
 local acf_m_roll = XPLMFindDataRef("sim/flightmodel/forces/L_total")
 local acf_m_ptch = XPLMFindDataRef("sim/flightmodel/forces/M_total")
 local acf_m_yaw = XPLMFindDataRef("sim/flightmodel/forces/N_total")
-
 -- Aircraft total forces
 local acf_t_alng = XPLMFindDataRef("sim/flightmodel/forces/faxil_total")
 local acf_t_down = XPLMFindDataRef("sim/flightmodel/forces/fnrml_total")
 local acf_t_side = XPLMFindDataRef("sim/flightmodel/forces/fside_total")
-
+-- Aircraft total weight (kg)
+local acf_w_total = XPLMFindDataRef("sim/flightmodel/weight/m_total")
 -- Override aircraft forces
 local override_forces = XPLMFindDataRef("sim/operation/override/override_forces")
+-- This is the multiplier for real-time...1 = realtime, 2 = 2x, 0 = paused, etc.
+--local sim_speed	= XPLMFindDataRef("sim/time/sim_speed")
 
 ----------------------------------------------------------------------------
 -- Local variables
@@ -223,112 +213,75 @@ local wnd_state
 -- Window size
 local wnd_x = 480
 local wnd_y = 590
-
 -- Input string variables for targeting world coordinates
 local trg_lat_str = ""
 local trg_lon_str = ""
 -- World coordinates input variables
 local trg_lat = 0
 local trg_lon = 0
-
 -- Altitude input variables
 local trg_asl = 0
 local trg_agl = 0
 local trg_trn = 0
-
 -- Aircraft position input
 local trg_ptch = 0
 local trg_roll = 0
 local trg_hdng = 0
-
 -- Aircraft groundspeed input
 local trg_gs = 0
-
 -- Target files variable and paths
-local trg_local_file
-local trg_global_file
-
+local trg_file_l
+local trg_file_g
 -- Paths to target files
 local acf_name = string.gsub(AIRCRAFT_FILENAME, ".acf", "")
-local trg_local_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
-local trg_global_dir = SCRIPT_DIRECTORY .. "teleport_targets.txt"
-
+local trg_file_l_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
+local trg_file_g_dir = SCRIPT_DIRECTORY .. "teleport_targets.txt"
 -- File position for target data (at the description end)
-local trg_data_start = 325
-
+local trg_file_data = 325
 -- Target load names in data array
-local trg_local_array = {""}
-local trg_global_array = {""}
+local trg_file_l_array = {""}
+local trg_file_g_array = {""}
 -- Target select name in array
-local trg_local_select = 1
-local trg_global_select = 1
-
+local trg_file_l_select = 1
+local trg_file_g_select = 1
 -- Target save data name
-local trg_save_name = ""
-
+local trg_name = ""
 -- Target data read/write status
 local trg_status = ""
-
 -- Create ID variable for probe Y-terrain testing
 local prb_ref = ffi.new("XPLMProbeRef")
-
 -- Create C structures for probe Y-terrain testing
 local prb_addr = ffi.new("XPLMProbeInfo_t*")
 local prb_value = ffi.new("XPLMProbeInfo_t[1]")
-
 -- Create ID for flight loop callbacks
-local frz_loop_id = ffi.new("XPLMFlightLoopID")
 local prb_loop_id = ffi.new("XPLMFlightLoopID")
+local frz_loop_id = ffi.new("XPLMFlightLoopID")
 
 ----------------------------------------------------------------------------
--- Convert coordinates functions
+-- Convert coordinates function
 ----------------------------------------------------------------------------
--- Convert world to OpenGL coordinates via XPLM
-function tlp_world_to_local(lat, lon, alt)
-	-- Create input variables
-	local lat = lat or 0
-	local lon = lon or 0
-	local alt = alt or 0
-	-- Create double for OpenGL coordinates
-	local xd = ffi.new("double[1]")
-	local yd = ffi.new("double[1]")
-	local zd = ffi.new("double[1]")
-	-- Create output numbers
-	local x
-	local y
-	local z
-	-- Event XPLM Graphic function XPLMWorldToLocal
-	XPLM.XPLMWorldToLocal(lat, lon, alt, xd, yd, zd)
+-- Convert coordinates via XPLM
+function tlp_conv(c_function, inN1, inN2, inN3)
+	-- Create input number variables
+	local inN1 = inN1 or 0
+	local inN2 = inN2 or 0
+	local inN3 = inN3 or 0
+	-- Create input double variables
+	local outD1 = ffi.new("double[1]")
+	local outD2 = ffi.new("double[1]")
+	local outD3 = ffi.new("double[1]")
+	-- Create output numbers variables
+	local outN1
+	local outN2
+	local outN3
+	-- Event XPLM C function
+	c_function(inN1, inN2, inN3, outD1, outD2, outD3)
 	-- Change output doubles to numbers
-	x = xd[0]
-	y = yd[0]
-	z = zd[0]
-	-- Return converted coordinates
-	return x, y, z
-end
-
--- Convert OpenGL to world coordinates via XPLM
-function tlp_local_to_world(x, y, z)
-	-- Create input variables
-	local x = x or 0
-	local y = y or 0
-	local z = z or 0
-	-- Create double for world coordinates
-	local latd = ffi.new("double[1]")
-	local lond = ffi.new("double[1]")
-	local altd = ffi.new("double[1]")
-	-- Create output numbers
-	local lat
-	local lon
-	local alt
-	-- Event XPLM Graphic function XPLMLocalToWorld
-	XPLM.XPLMLocalToWorld(x, y, z, latd, lond, altd)
-	-- Change output doubles to numbers
-	lat = latd[0]
-	lon = lond[0]
-	alt = altd[0]
-	-- Return converted coordinates
-	return lat, lon, alt
+	outN1 = outD1[0]
+	outN2 = outD2[0]
+	outN3 = outD3[0]
+	-- Return converted
+	return outN1, outN2, outN3
 end
 
 ----------------------------------------------------------------------------
@@ -414,7 +367,7 @@ function tlp_set_loc(lat, lon, alt)
 		alt = XPLMGetDatad(acf_elv)
 	end
 	-- Convert and jump to target location
-	x, y, z = tlp_world_to_local(lat, lon, alt)
+	x, y, z = tlp_conv(XPLM.XPLMWorldToLocal, lat, lon, alt)
 	XPLMSetDatad(acf_x, x)
 	XPLMSetDatad(acf_y, y)
 	XPLMSetDatad(acf_z, z)
@@ -586,13 +539,13 @@ function tlp_prb_trn(lat, lon, alt)
 	local yf = ffi.new("float[1]")
 	local zf = ffi.new("float[1]")
 	-- Convert input world coordinates to local floats
-	xf[0], yf[0], zf[0] = tlp_world_to_local(lat, lon, alt)
+	xf[0], yf[0], zf[0] = tlp_conv(XPLM.XPLMWorldToLocal, lat, lon, alt)
 	-- Get terrain elevation
 	XPLM.XPLMProbeTerrainXYZ(prb_ref, xf[0], yf[0], zf[0], prb_addr)
 	-- Output structure
 	prb_value = prb_addr
 	-- Output terrain elevation
-	_, _, terrain = tlp_local_to_world(prb_value[0].locationX, prb_value[0].locationY, prb_value[0].locationZ)
+	_, _, terrain = tlp_conv(XPLM.XPLMLocalToWorld, prb_value[0].locationX, prb_value[0].locationY, prb_value[0].locationZ)
 	return terrain
 end
 
@@ -685,7 +638,7 @@ end
 function trg_names(file)
 	local array = {""}
 	-- Go to target read/write position in file
-	file:seek("set", trg_data_start)
+	file:seek("set", trg_file_data)
 	-- Find all targets names
 	for i in file:lines() do
 		for s in string.gmatch(i, "%S+") do
@@ -708,12 +661,12 @@ function target(action, state, name)
 	local trg_data = {}
 	-- Choose a directory depending on state
 	if state == "local" then
-		file = trg_local_file
+		file = trg_file_l
 	elseif state == "global" then
-		file = trg_global_file
+		file = trg_file_g
 	end
 	-- Go to target read/write position in file
-	file:seek("set", trg_data_start)
+	file:seek("set", trg_file_data)
 	-- Find target for read or delete
 	if action == "load" or action == "delete" then
 		-- Save file position when start reading new line
@@ -760,7 +713,7 @@ function target(action, state, name)
 		-- Read target deleting string
 		junk = string.format(file:read() .. "\n")
 		-- Go to data start position
-		file:seek("set", trg_data_start)
+		file:seek("set", trg_file_data)
 		-- Read all data
 		all_data = file:read("*a")
 		-- Replace deleting target data string by nothing
@@ -768,11 +721,11 @@ function target(action, state, name)
 		-- Reopen in write mode and save fixed data
 		file:close()
 		if state == "local" then
-			trg_new_file(trg_local_dir, fixed_data)
-			trg_local_file = trg_load_file(trg_local_dir)
+			trg_new_file(trg_file_l_dir, fixed_data)
+			trg_file_l = trg_load_file(trg_file_l_dir)
 		elseif state == "global" then
-			trg_new_file(trg_global_dir, fixed_data)
-			trg_global_file = trg_load_file(trg_global_dir)
+			trg_new_file(trg_file_g_dir, fixed_data)
+			trg_file_g = trg_load_file(trg_file_g_dir)
 		end
 		-- Target status log
 		trg_status = "Deleted '" .. name .. "' from " .. state
@@ -809,8 +762,8 @@ function tlp_wnd_show()
 	-- Do on close
 	float_wnd_set_onclose(wnd, "tlp_wnd_hide")
 	-- Load targets data files
-	trg_local_file = trg_load_file(trg_local_dir)
-	trg_global_file = trg_load_file(trg_global_dir)
+	trg_file_l = trg_load_file(trg_file_l_dir)
+	trg_file_g = trg_load_file(trg_file_g_dir)
 	-- Load probe for Y-terrain testing
 	tlp_prb_load()
 	-- Start Y-terrain probe loop
@@ -824,8 +777,8 @@ function tlp_wnd_hide()
 	-- Change window state
 	wnd_state = false
 	-- Close target data files
-	trg_local_file:close()
-	trg_global_file:close()
+	trg_file_l:close()
+	trg_file_g:close()
 	-- Stop Y-terrain probe loop
 	prb_loop_id = tlp_loop_stop(prb_loop_id)
 	-- Unload probe for Y-terrain testing
@@ -1257,40 +1210,40 @@ function tlp_wnd_build(wnd, x, y)
 	
 	-- Create input string for writing target save name
 	imgui.PushItemWidth(wnd_x - 44)
-    local changed, newVal = imgui.InputText("name", trg_save_name, 40) -- if string inputs label is the same, then the variables overwrite each other
+    local changed, newVal = imgui.InputText("name", trg_name, 40) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
     if changed then
-        trg_save_name = newVal
+        trg_name = newVal
     end	
 	imgui.PopItemWidth()
 	
 	-- Get target names to array from local file
-	trg_local_array = trg_names(trg_local_file)
+	trg_file_l_array = trg_names(trg_file_l)
 	-- Combobox for local targets
 	imgui.PushItemWidth(col_x[2] - 45)
-	if imgui.BeginCombo("local", trg_local_array[trg_local_select]) then
+	if imgui.BeginCombo("local", trg_file_l_array[trg_file_l_select]) then
 		-- Select only names in array
-		for i = 1, #trg_local_array, 8 do
+		for i = 1, #trg_file_l_array, 8 do
 			-- Add selectable target to combobox
-			if imgui.Selectable(trg_local_array[i], trg_local_select == i) then
+			if imgui.Selectable(trg_file_l_array[i], trg_file_l_select == i) then
 				-- If new target was selected, change current
-				trg_local_select = i
+				trg_file_l_select = i
 			end
 		end
 		imgui.EndCombo()
 	end
 	
 	-- Get target names to array from global file
-	trg_global_array = trg_names(trg_global_file)
+	trg_file_g_array = trg_names(trg_file_g)
 	-- Combobox for global targets
 	imgui.SameLine()
-	if imgui.BeginCombo("global", trg_global_array[trg_global_select]) then
+	if imgui.BeginCombo("global", trg_file_g_array[trg_file_g_select]) then
 		-- Select only names in array
-		for i = 1, #trg_global_array, 8 do
+		for i = 1, #trg_file_g_array, 8 do
 			-- Add selectable target to combobox
-			if imgui.Selectable(trg_global_array[i], trg_global_select == i) then
+			if imgui.Selectable(trg_file_g_array[i], trg_file_g_select == i) then
 				-- If new target was selected, change current
-				trg_global_select = i
+				trg_file_g_select = i
 			end
 		end
 		imgui.EndCombo()
@@ -1301,11 +1254,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[0])
 	if imgui.Button("Save", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is named
-		if trg_save_name == "" then
+		if trg_name == "" then
 			trg_status = "Error! Empty target name!"
 		else
-			target("save", "local", trg_save_name)
-			trg_save_name = ""
+			target("save", "local", trg_name)
+			trg_name = ""
 		end
 	end
 	
@@ -1314,11 +1267,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[1] / 2)
 	if imgui.Button("Load", but_1_x - indent / 4, but_1_y) then
 		-- Check first that the target is selected
-		if trg_local_select == 1 then
+		if trg_file_l_select == 1 then
 			trg_status = "Error! Select the local target to load!"
 		else
-			target("load", "local", trg_local_array[trg_local_select])
-			trg_local_select = 1
+			target("load", "local", trg_file_l_array[trg_file_l_select])
+			trg_file_l_select = 1
 		end
 	end
 	
@@ -1327,11 +1280,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[2] / 4 * 3 + indent / 4)
 	if imgui.Button("Delete", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is selected
-		if trg_local_select == 1 then
+		if trg_file_l_select == 1 then
 			trg_status = "Error! Select the local target to delete!"
 		else
-			target("delete", "local", trg_local_array[trg_local_select])
-			trg_local_select = 1
+			target("delete", "local", trg_file_l_array[trg_file_l_select])
+			trg_file_l_select = 1
 		end
 	end
 	
@@ -1340,11 +1293,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[2] + indent / 4)
 	if imgui.Button(" Save ", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is named
-		if trg_save_name == "" then
+		if trg_name == "" then
 			trg_status = "Error! Empty target name!"
 		else
-			target("save", "global", trg_save_name)
-			trg_save_name = ""
+			target("save", "global", trg_name)
+			trg_name = ""
 		end
 	end
 	
@@ -1353,11 +1306,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3] / 6 * 5 + indent / 4)
 	if imgui.Button(" Load ", but_1_x - indent / 4, but_1_y) then
 		-- Check first that the target is selected
-		if trg_global_select == 1 then
+		if trg_file_g_select == 1 then
 			trg_status = "Error! Select the global target to load!"
 		else
-			target("load", "global", trg_global_array[trg_global_select])
-			trg_global_select = 1
+			target("load", "global", trg_file_g_array[trg_file_g_select])
+			trg_file_g_select = 1
 		end
 	end
 	
@@ -1366,11 +1319,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3] / 6 * 7 + indent / 2)
 	if imgui.Button("Delete ", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is selected
-		if trg_global_select == 1 then
+		if trg_file_g_select == 1 then
 			trg_status = "Error! Select the global target to delete!"
 		else
-			target("delete", "global", trg_global_array[trg_global_select])
-			trg_global_select = 1
+			target("delete", "global", trg_file_g_array[trg_file_g_select])
+			trg_file_g_select = 1
 		end
 	end
 	
