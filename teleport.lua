@@ -261,6 +261,8 @@ local prb_loop_id = ffi.new("XPLMFlightLoopID")
 local frz_loop_id = ffi.new("XPLMFlightLoopID")
 -- Correct above ground altitude (AGL) for aircraft
 local acf_gr_on_gnd = 0
+-- Freeze current state
+local frz_enable = false
 
 ----------------------------------------------------------------------------
 -- Convert coordinates function
@@ -480,26 +482,36 @@ end
 ----------------------------------------------------------------------------
 -- Freeze functions
 ----------------------------------------------------------------------------
--- Freeze aircraft toggle
+-- Freeze enable function
+function tlp_frz_enable()
+	-- Change current state
+	frz_enable = true
+	-- Get all targets
+	tlp_get_trg()
+	-- Strat loop
+	frz_loop_id = tlp_loop_start(tlp_frz_loop, frz_loop_id)
+	-- Start forces override
+	XPLMSetDatai(override_forces, 1)
+end
+
+--Freeze disable function
+function tlp_frz_disable()
+	-- Change current state
+	frz_enable = false
+	-- Stop loop
+	frz_loop_id = tlp_loop_stop(frz_loop_id)
+	-- Return aircraft target speed
+	tlp_set_spd(trg_gs, trg_hdng, trg_ptch)
+	-- Stop forces override
+	XPLMSetDatai(override_forces, 0)
+end
+
+-- Freeze toggle function
 function tlp_frz_tgl()
-	-- Invert toggle variable
-	frz_enable = not frz_enable
-	-- If true
 	if frz_enable then
-		-- Get all targets
-		tlp_get_trg()
-		-- Strat loop
-		frz_loop_id = tlp_loop_start(tlp_frz_loop, frz_loop_id)
-		-- Start forces override
-		XPLMSetDatai(override_forces, 1)
-	-- if not
+		tlp_frz_disable()
 	else
-		-- Stop loop
-		frz_loop_id = tlp_loop_stop(frz_loop_id)
-		-- Return aircraft target speed
-		tlp_set_spd(trg_gs, trg_hdng, trg_ptch)
-		-- Stop forces override
-		XPLMSetDatai(override_forces, 0)
+		tlp_frz_enable()
 	end
 end
 
@@ -519,7 +531,6 @@ function tlp_frz_loop(last_call, last_loop, counter, refcon)
 		return ffi.new("float", 0)
 	end
 end
-
 
 ----------------------------------------------------------------------------
 -- Terrain probe functions
@@ -773,18 +784,24 @@ end
 ----------------------------------------------------------------------------
 -- Imgui functions
 ----------------------------------------------------------------------------
--- Show imgui floating window
-function tlp_wnd_show()
-	-- Change window state
-	wnd_state = true
+-- Create imgui window
+function tlp_wnd_create()
 	-- Create floating window
 	wnd = float_wnd_create(wnd_x, wnd_y, 1, true)
 	-- Set floating window title
 	float_wnd_set_title(wnd, "Teleport")
 	-- Updating floating window
 	float_wnd_set_imgui_builder(wnd, "tlp_wnd_build")
-	-- Do on close
+	-- Do other things on close
 	float_wnd_set_onclose(wnd, "tlp_wnd_hide")
+	-- Do other things on start
+	tlp_wnd_show()
+end
+
+-- Do after create imgui window
+function tlp_wnd_show()
+	-- Change window state
+	wnd_state = true
 	-- Load targets data files
 	trg_file_l = trg_load_file(trg_file_l_dir)
 	trg_file_g = trg_load_file(trg_file_g_dir)
@@ -794,6 +811,11 @@ function tlp_wnd_show()
 	prb_loop_id = tlp_loop_start(tlp_prb_loop, prb_loop_id)
 	-- Get targets at start
 	tlp_get_trg()
+end
+
+-- Destroy imgui window
+function tlp_wnd_destroy()
+	if wnd then float_wnd_destroy(wnd) end
 end
 
 -- Hide imgui floating window
@@ -813,11 +835,11 @@ end
 function  tlp_wnd_tgl()
 	-- Check window state
 	if wnd_state then
-		-- Hide window
-		float_wnd_destroy(wnd)
+		-- Destroy window
+		tlp_wnd_destroy()
 	else
-		-- Show window
-		tlp_wnd_show()
+		-- Create window
+		tlp_wnd_create()
 	end
 end
 
@@ -1443,11 +1465,21 @@ create_command("FlyWithLua/teleport/freeze",
 ----------------------------------------------------------------------------
 -- Macro
 ----------------------------------------------------------------------------
---add_macro("Teleport: open/close", "tlp_wnd_tgl()", "tlp_wnd_tgl()", "deactivate")
+--add_macro("Teleport: open/close", "tlp_wnd_create()", "tlp_wnd_destroy()", "deactivate")
 
 ----------------------------------------------------------------------------
 -- Events
 ----------------------------------------------------------------------------
 -- Get targets at start
 tlp_get_trg()
+-- Set gear on ground height
 tlp_acf_gr_on_gnd()
+-- Do on exit/restart script
+function tlp_exit()
+	-- Stop flight loop callbacks
+	frz_loop_id = tlp_loop_stop(frz_loop_id)
+	prb_loop_id = tlp_loop_stop(prb_loop_id)
+	-- Stop forces override
+	if frz_enable then XPLMSetDatai(override_forces, 0) end
+end
+do_on_exit("tlp_exit()")
