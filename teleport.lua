@@ -915,9 +915,17 @@ function tlp_wnd_build(wnd, x, y)
 	end
 	-- Set freeze status color
 	local frz_color
+	local frz_but_name = ""
 	if frz_enable then
-		frz_color = 0xFFFFD37A
+		frz_but_name = "LAUNCH"
+		-- blue color
+		--frz_color = 0xFFFFD37A
+		-- red color
+		--frz_color = 0xFF0000FF
+		-- light red color
+		frz_color = 0xFF5050FF
 	else
+		frz_but_name = "FREEZE"
 		frz_color = 0xFFFFFFFF
 	end
 	
@@ -1392,7 +1400,7 @@ function tlp_wnd_build(wnd, x, y)
 	-- Set color for freeze indicated status
 	imgui.PushStyleColor(imgui.constant.Col.Text, frz_color)
 	-- Button that freeze aircraft
-	if imgui.Button("FREEZE", wnd_x, but_2_y) then
+	if imgui.Button(frz_but_name, wnd_x, but_2_y) then
 		-- Freeze an aircraft
 		tlp_frz_tgl()
 	end
