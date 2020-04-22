@@ -293,7 +293,7 @@ end
 -- Target functions
 ----------------------------------------------------------------------------
 -- Target to current aircraft state
-function tlp_get_tgt()
+function tlp_get_trg()
 	tlp_get_loc()
 	tlp_get_alt()
 	tlp_get_pos()
@@ -487,7 +487,7 @@ function tlp_frz_tgl()
 	-- If true
 	if frz_enable then
 		-- Get all targets
-		tlp_get_tgt()
+		tlp_get_trg()
 		-- Strat loop
 		frz_loop_id = tlp_loop_start(tlp_frz_loop, frz_loop_id)
 		-- Start forces override
@@ -793,7 +793,7 @@ function tlp_wnd_show()
 	-- Start Y-terrain probe loop
 	prb_loop_id = tlp_loop_start(tlp_prb_loop, prb_loop_id)
 	-- Get targets at start
-	tlp_get_tgt()
+	tlp_get_trg()
 end
 
 -- Hide imgui floating window
@@ -1215,7 +1215,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.TextUnformatted("")
 	if imgui.Button("TARGET", wnd_x, but_2_y) then
 		-- Get all targets
-		tlp_get_tgt()
+		tlp_get_trg()
 	end
 	-- Button that target to current location
 	imgui.SetCursorPosX(indent + col_x[0])
@@ -1423,7 +1423,7 @@ create_command("FlyWithLua/teleport/toggle",
 -- Target aircraft current state
 create_command("FlyWithLua/teleport/target",
                "Target aircraft current state",
-               "tlp_get_tgt()",
+               "tlp_get_trg()",
                "",
                "")
 
@@ -1449,5 +1449,5 @@ create_command("FlyWithLua/teleport/freeze",
 -- Events
 ----------------------------------------------------------------------------
 -- Get targets at start
-tlp_get_tgt()
+tlp_get_trg()
 tlp_acf_gr_on_gnd()
