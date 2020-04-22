@@ -196,6 +196,13 @@ local acf_m_yaw = XPLMFindDataRef("sim/flightmodel/forces/N_total")
 local acf_t_alng = XPLMFindDataRef("sim/flightmodel/forces/faxil_total")
 local acf_t_down = XPLMFindDataRef("sim/flightmodel/forces/fnrml_total")
 local acf_t_side = XPLMFindDataRef("sim/flightmodel/forces/fside_total")
+-- Gear on ground statics
+local acf_gr_stat_def = XPLMFindDataRef("sim/aircraft/parts/acf_gearstatdef")
+local acf_gr_h = XPLMFindDataRef("sim/aircraft/gear/acf_h_eqlbm")
+-- Gear Y location relative to aircraft CG
+-- local acf_gr_cg_y = XPLMFindDataRef("sim/aircraft/parts/acf_gear_ynodef")
+-- local acf_gr_lat_ext = XPLMFindDataRef("sim/aircraft/parts/acf_gear_latE")
+-- local acf_gr_leg_len = XPLMFindDataRef("sim/aircraft/parts/acf_gear_leglen")
 -- Aircraft total weight (kg)
 local acf_w_total = XPLMFindDataRef("sim/flightmodel/weight/m_total")
 -- Override aircraft forces
@@ -256,6 +263,8 @@ local prb_value = ffi.new("XPLMProbeInfo_t[1]")
 -- Create ID for flight loop callbacks
 local prb_loop_id = ffi.new("XPLMFlightLoopID")
 local frz_loop_id = ffi.new("XPLMFlightLoopID")
+-- Above ground altitude when aircraft collide ground with any of gears
+local acf_gr_on_gnd = 0
 
 ----------------------------------------------------------------------------
 -- Convert coordinates function
@@ -363,8 +372,14 @@ function tlp_set_loc(lat, lon, alt)
 		lon = XPLMGetDatad(acf_lon)
 	end
 	-- Check altitude value is correct
-	if alt == nil or alt < 0 or alt > 37650 then
-		alt = XPLMGetDatad(acf_elv)
+	if alt < trg_trn then
+		alt = trg_trn
+		trg_asl = trg_trn
+	else
+		if alt == nil or alt < -418 or alt > 37650 then
+			alt = XPLMGetDatad(acf_elv)
+			trg_asl = XPLMGetDatad(acf_elv)
+		end
 	end
 	-- Convert and jump to target location
 	x, y, z = tlp_conv(XPLM.XPLMWorldToLocal, lat, lon, alt)
@@ -425,6 +440,9 @@ function tlp_set_frcs(pitch, roll)
 	XPLMSetDataf(acf_t_side, g_force_side)
 end
 
+----------------------------------------------------------------------------
+-- Gyroscope functions
+----------------------------------------------------------------------------
 -- Convert axis along aircraft to proportional multiplier
 function tlp_gyro_alng(axis)
 	solution = (axis / 90)
@@ -551,16 +569,13 @@ end
 
 -- Calc target terrain height every frame
 function tlp_prb_loop(last_call, last_loop, counter, refcon)
+	local gr_gnd
 	-- If enabled
 	if wnd_state then
 		-- read terrain level
-		trg_trn = tlp_prb_trn(trg_lat, trg_lon, XPLMGetDatad(acf_elv))
+		trg_trn = tlp_prb_trn(trg_lat, trg_lon, XPLMGetDatad(acf_elv)) + acf_gr_on_gnd
 		-- calc above ground altitude
 		trg_agl = trg_asl - trg_trn
-		-- prevent underground collide
-		if trg_agl < 0 then
-			trg_asl = trg_trn
-		end
 		-- Resume loop
 		return ffi.new("float", -1)
 	-- if disabled
@@ -975,7 +990,6 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.PushItemWidth(col_size[3])
 	local changed, newInt = imgui.InputInt("                        ", trg_asl)
 	if changed then
-		trg_agl = trg_agl + newInt - trg_asl
 		trg_asl = newInt
 	end
 	imgui.PopItemWidth()
@@ -1374,6 +1388,41 @@ function tlp_wnd_build(wnd, x, y)
 end
 
 ----------------------------------------------------------------------------
+-- Other functions
+----------------------------------------------------------------------------
+-- function tlp_acf_gr_on_gnd()
+	-- -- Create arrays at every gear on aircraft
+	-- local cg_y = {}
+	-- local leg_len = {}
+	-- local lat_ext = {}
+	-- local gr_gnd_cld = {}
+	-- -- Read Datarefs arrays
+	-- cg_y = XPLMGetDatavf(acf_gr_cg_y, 0, 10)
+	-- lat_ext = XPLMGetDatavf(acf_gr_lat_ext, 0, 10)
+	-- leg_len = XPLMGetDatavf(acf_gr_leg_len, 0, 10)
+	-- -- Calc gear ground collide points
+	-- for i = 0, 9 do
+		-- gr_gnd_cld[i] = -cg_y[i] + leg_len[i] * tlp_gyro_inv(tlp_gyro_side(math.abs(lat_ext[i])))
+	-- end
+	-- -- Set local script variable
+	-- acf_gr_on_gnd = math.max(unpack(gr_gnd_cld))
+	-- -- Return value that aircraft collide ground with any of gears
+	-- --return math.max(unpack(gr_gnd_cld))
+-- end
+
+function tlp_acf_gr_on_gnd()
+	-- Create local gear array
+	local gr_on_gnd = {}
+	-- Add static on ground defflection to array
+	gr_on_gnd = XPLMGetDatavf(acf_gr_stat_def, 0, 10)
+	-- Add static on ground height to array
+	for i = 0, 9 do
+		gr_on_gnd[i] = gr_on_gnd[i] + XPLMGetDataf(acf_gr_h)
+	end
+	acf_gr_on_gnd = math.max(unpack(gr_on_gnd))
+end
+
+----------------------------------------------------------------------------
 -- Custom commands
 ----------------------------------------------------------------------------
 -- Toggle visibility of imgui window
@@ -1409,3 +1458,5 @@ create_command("FlyWithLua/teleport/freeze",
 ----------------------------------------------------------------------------
 -- Get targets at start
 tlp_get_tgt()
+tlp_acf_gr_on_gnd()
+--add_macro("Teleport: open/close", "tlp_wnd_tgl()", "tlp_wnd_tgl()", "deactivate")
