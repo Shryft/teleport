@@ -199,10 +199,6 @@ local acf_t_side = XPLMFindDataRef("sim/flightmodel/forces/fside_total")
 -- Gear on ground statics
 local acf_gr_stat_def = XPLMFindDataRef("sim/aircraft/parts/acf_gearstatdef")
 local acf_gr_h = XPLMFindDataRef("sim/aircraft/gear/acf_h_eqlbm")
--- Gear Y location relative to aircraft CG
--- local acf_gr_cg_y = XPLMFindDataRef("sim/aircraft/parts/acf_gear_ynodef")
--- local acf_gr_lat_ext = XPLMFindDataRef("sim/aircraft/parts/acf_gear_latE")
--- local acf_gr_leg_len = XPLMFindDataRef("sim/aircraft/parts/acf_gear_leglen")
 -- Aircraft total weight (kg)
 local acf_w_total = XPLMFindDataRef("sim/flightmodel/weight/m_total")
 -- Override aircraft forces
@@ -263,7 +259,7 @@ local prb_value = ffi.new("XPLMProbeInfo_t[1]")
 -- Create ID for flight loop callbacks
 local prb_loop_id = ffi.new("XPLMFlightLoopID")
 local frz_loop_id = ffi.new("XPLMFlightLoopID")
--- Above ground altitude when aircraft collide ground with any of gears
+-- Correct above ground altitude (AGL) for aircraft
 local acf_gr_on_gnd = 0
 
 ----------------------------------------------------------------------------
@@ -569,7 +565,6 @@ end
 
 -- Calc target terrain height every frame
 function tlp_prb_loop(last_call, last_loop, counter, refcon)
-	local gr_gnd
 	-- If enabled
 	if wnd_state then
 		-- read terrain level
@@ -583,6 +578,20 @@ function tlp_prb_loop(last_call, last_loop, counter, refcon)
 		-- Stop loop
 		return ffi.new("float", 0)
 	end
+end
+
+-- Aircraft above ground level correction (AGL) from gear ground collide
+function tlp_acf_gr_on_gnd()
+	-- Create local gear array
+	local gr_on_gnd = {}
+	-- Add static on ground defflection to array
+	gr_on_gnd = XPLMGetDatavf(acf_gr_stat_def, 0, 10)
+	-- Add static on ground height to array
+	for i = 0, 9 do
+		gr_on_gnd[i] = gr_on_gnd[i] + XPLMGetDataf(acf_gr_h)
+	end
+	-- Findout and set maximum height from ground to aircraft CG
+	acf_gr_on_gnd = math.max(unpack(gr_on_gnd))
 end
 
 ----------------------------------------------------------------------------
@@ -1388,41 +1397,6 @@ function tlp_wnd_build(wnd, x, y)
 end
 
 ----------------------------------------------------------------------------
--- Other functions
-----------------------------------------------------------------------------
--- function tlp_acf_gr_on_gnd()
-	-- -- Create arrays at every gear on aircraft
-	-- local cg_y = {}
-	-- local leg_len = {}
-	-- local lat_ext = {}
-	-- local gr_gnd_cld = {}
-	-- -- Read Datarefs arrays
-	-- cg_y = XPLMGetDatavf(acf_gr_cg_y, 0, 10)
-	-- lat_ext = XPLMGetDatavf(acf_gr_lat_ext, 0, 10)
-	-- leg_len = XPLMGetDatavf(acf_gr_leg_len, 0, 10)
-	-- -- Calc gear ground collide points
-	-- for i = 0, 9 do
-		-- gr_gnd_cld[i] = -cg_y[i] + leg_len[i] * tlp_gyro_inv(tlp_gyro_side(math.abs(lat_ext[i])))
-	-- end
-	-- -- Set local script variable
-	-- acf_gr_on_gnd = math.max(unpack(gr_gnd_cld))
-	-- -- Return value that aircraft collide ground with any of gears
-	-- --return math.max(unpack(gr_gnd_cld))
--- end
-
-function tlp_acf_gr_on_gnd()
-	-- Create local gear array
-	local gr_on_gnd = {}
-	-- Add static on ground defflection to array
-	gr_on_gnd = XPLMGetDatavf(acf_gr_stat_def, 0, 10)
-	-- Add static on ground height to array
-	for i = 0, 9 do
-		gr_on_gnd[i] = gr_on_gnd[i] + XPLMGetDataf(acf_gr_h)
-	end
-	acf_gr_on_gnd = math.max(unpack(gr_on_gnd))
-end
-
-----------------------------------------------------------------------------
 -- Custom commands
 ----------------------------------------------------------------------------
 -- Toggle visibility of imgui window
@@ -1452,6 +1426,10 @@ create_command("FlyWithLua/teleport/freeze",
                "tlp_frz_tgl()",
                "",
                "")
+----------------------------------------------------------------------------
+-- Macro
+----------------------------------------------------------------------------
+--add_macro("Teleport: open/close", "tlp_wnd_tgl()", "tlp_wnd_tgl()", "deactivate")
 
 ----------------------------------------------------------------------------
 -- Events
@@ -1459,4 +1437,3 @@ create_command("FlyWithLua/teleport/freeze",
 -- Get targets at start
 tlp_get_tgt()
 tlp_acf_gr_on_gnd()
---add_macro("Teleport: open/close", "tlp_wnd_tgl()", "tlp_wnd_tgl()", "deactivate")
