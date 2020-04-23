@@ -185,9 +185,9 @@ local acf_hdng	= XPLMFindDataRef("sim/flightmodel/position/psi")
 -- The MASTER copy of the aircraft's orientation when the physics model is in, units quaternion
 local acf_q	= XPLMFindDataRef("sim/flightmodel/position/q")
 -- Aircraft velocity in OpenGL coordinates (meter/sec)
-local acf_vx	= XPLMFindDataRef("sim/flightmodel/position/local_vx")
-local acf_vy	= XPLMFindDataRef("sim/flightmodel/position/local_vy")
-local acf_vz	= XPLMFindDataRef("sim/flightmodel/position/local_vz")
+local acf_vx = XPLMFindDataRef("sim/flightmodel/position/local_vx")
+local acf_vy = XPLMFindDataRef("sim/flightmodel/position/local_vy")
+local acf_vz = XPLMFindDataRef("sim/flightmodel/position/local_vz")
 -- Aircraft force moments
 local acf_m_roll = XPLMFindDataRef("sim/flightmodel/forces/L_total")
 local acf_m_ptch = XPLMFindDataRef("sim/flightmodel/forces/M_total")
@@ -489,7 +489,7 @@ function tlp_frz_enable()
 	-- Get all targets
 	tlp_get_trg()
 	-- Strat loop
-	frz_loop_id = tlp_loop_start(tlp_frz_loop, frz_loop_id)
+	frz_loop_id = tlp_loop_start(tlp_frz_loop, XPLM.xplm_FlightLoop_Phase_AfterFlightModel, frz_loop_id)
 	-- Start forces override
 	XPLMSetDatai(override_forces, 1)
 end
@@ -609,11 +609,14 @@ end
 -- Flight loop functions
 ----------------------------------------------------------------------------
 -- Start flight loop
-function tlp_loop_start(loop, id)
+function tlp_loop_start(loop, phase, id)
 	-- Create flight loop struct
 	local loop_struct = ffi.new('XPLMCreateFlightLoop_t',
+										-- Struct own size
 										ffi.sizeof('XPLMCreateFlightLoop_t'),
-										XPLM.xplm_FlightLoop_Phase_AfterFlightModel,
+										-- In game physic phase
+										phase,
+										-- Loop function
 										loop,
 										refcon)
 	-- Create new flight loop id
@@ -808,7 +811,7 @@ function tlp_wnd_show()
 	-- Load probe for Y-terrain testing
 	tlp_prb_load()
 	-- Start Y-terrain probe loop
-	prb_loop_id = tlp_loop_start(tlp_prb_loop, prb_loop_id)
+	prb_loop_id = tlp_loop_start(tlp_prb_loop, XPLM.xplm_FlightLoop_Phase_BeforeFlightModel, prb_loop_id)
 	-- Get targets at start
 	tlp_get_trg()
 end
