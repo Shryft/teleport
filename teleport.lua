@@ -268,7 +268,7 @@ local frz_enable = false
 -- Convert coordinates function
 ----------------------------------------------------------------------------
 -- Convert coordinates via XPLM
-function tlp_conv(c_function, inN1, inN2, inN3)
+function tlp_loc_convert(c_function, inN1, inN2, inN3)
 	-- Create input number variables
 	local inN1 = inN1 or 0
 	local inN2 = inN2 or 0
@@ -380,7 +380,7 @@ function tlp_set_loc(lat, lon, alt)
 		end
 	end
 	-- Convert and jump to target location
-	x, y, z = tlp_conv(XPLM.XPLMWorldToLocal, lat, lon, alt)
+	x, y, z = tlp_loc_convert(XPLM.XPLMWorldToLocal, lat, lon, alt)
 	XPLMSetDatad(acf_x, x)
 	XPLMSetDatad(acf_y, y)
 	XPLMSetDatad(acf_z, z)
@@ -564,13 +564,13 @@ function tlp_prb_trn(lat, lon, alt)
 	local yf = ffi.new("float[1]")
 	local zf = ffi.new("float[1]")
 	-- Convert input world coordinates to local floats
-	xf[0], yf[0], zf[0] = tlp_conv(XPLM.XPLMWorldToLocal, lat, lon, alt)
+	xf[0], yf[0], zf[0] = tlp_loc_convert(XPLM.XPLMWorldToLocal, lat, lon, alt)
 	-- Get terrain elevation
 	XPLM.XPLMProbeTerrainXYZ(prb_ref, xf[0], yf[0], zf[0], prb_addr)
 	-- Output structure
 	prb_value = prb_addr
 	-- Output terrain elevation
-	_, _, terrain = tlp_conv(XPLM.XPLMLocalToWorld, prb_value[0].locationX, prb_value[0].locationY, prb_value[0].locationZ)
+	_, _, terrain = tlp_loc_convert(XPLM.XPLMLocalToWorld, prb_value[0].locationX, prb_value[0].locationY, prb_value[0].locationZ)
 	return terrain
 end
 
