@@ -793,6 +793,8 @@ function tlp_wnd_create()
 	wnd = float_wnd_create(wnd_x, wnd_y, 1, true)
 	-- Set floating window title
 	float_wnd_set_title(wnd, "Teleport")
+	-- Block window resize
+	float_wnd_set_resizing_limits(wnd, wnd_x, wnd_y, wnd_x, wnd_y)
 	-- Updating floating window
 	float_wnd_set_imgui_builder(wnd, "tlp_wnd_build")
 	-- Do other things on close
