@@ -263,6 +263,8 @@ local frz_loop_id = ffi.new("XPLMFlightLoopID")
 local acf_gr_on_gnd = 0
 -- Freeze current state
 local frz_enable = false
+-- Count inputs with transparent id
+local wnd_input_count = 0
 
 ----------------------------------------------------------------------------
 -- Convert coordinates function
@@ -855,15 +857,17 @@ function  tlp_wnd_tgl()
 end
 
 -- Create invisible ID for imgui input boxes
-function tlp_wnd_input_id(count)
+function tlp_wnd_input_id()
 	-- Create empty string value
 	local id_str = ""
 	-- Create string with space
 	local space_str = " "
-	-- Apply 'count' number of spaces to string ID
-	for i = 1, count do
+	-- Apply 'wnd_input_count' number of spaces to string ID
+	for i = 1, wnd_input_count do
 		id_str = id_str .. space_str
 	end
+	-- Count iteration
+	wnd_input_count = wnd_input_count + 1
 	-- Return string ID
 	return id_str
 end
@@ -939,6 +943,8 @@ function tlp_wnd_build(wnd, x, y)
 		frz_but_name = "FREEZE"
 		frz_color = 0xFFFFFFFF
 	end
+	-- Reset input count
+	wnd_input_count = 0
 	
 	-- Type 2 title for table columns
 	imgui.PushStyleColor(imgui.constant.Col.Text, title_2_color)
@@ -980,7 +986,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.PushItemWidth(col_size[3])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lat)
 	-- Create input string for latitude
-    local changed, newVal = imgui.InputText(tlp_wnd_input_id(0), trg_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
+    local changed, newVal = imgui.InputText(tlp_wnd_input_id(), trg_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
     if changed then
         trg_lat_str = newVal
@@ -1014,7 +1020,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.PushItemWidth(col_size[3])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lon)
 	-- Create input string for longitude
-    local changed, newVal = imgui.InputText(tlp_wnd_input_id(1), trg_lon_str, 10)
+    local changed, newVal = imgui.InputText(tlp_wnd_input_id(), trg_lon_str, 10)
 	-- If input value is changed by user
     if changed then
         trg_lon_str = newVal
@@ -1052,7 +1058,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(2), trg_asl)
+	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_asl)
 	if changed then
 		trg_asl = newInt
 	end
@@ -1117,7 +1123,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(3), trg_ptch)
+	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_ptch)
 	if changed then
 		-- set limit to max and min pitch angle according to x-plane dataref
 		if newInt < -90 or newInt > 90 then
@@ -1146,7 +1152,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(4), trg_roll)
+	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_roll)
 	if changed then
 		-- create loop for roll target value
 		if newInt < -180 then
@@ -1177,7 +1183,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(5), trg_hdng)
+	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_hdng)
 	if changed then
 		-- create loop for heading target value
 		if newInt < 0 then
@@ -1227,7 +1233,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[3])
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(6), trg_gs)
+	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_gs)
 	if changed then
 		-- limit speed
 		if newInt < 0 then
