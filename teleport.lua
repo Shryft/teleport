@@ -1122,7 +1122,7 @@ function tlp_wnd_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_ptch)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_ptch)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4])
@@ -1151,7 +1151,7 @@ function tlp_wnd_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_roll)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_roll)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4])
@@ -1182,7 +1182,7 @@ function tlp_wnd_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_hdng)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_hdng)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4])
@@ -1219,7 +1219,7 @@ function tlp_wnd_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_as) * 0.514))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_as) * 0.514))
 	
 	-- Indicated groundspeed (meter/sec)
 	-- Variable
@@ -1232,7 +1232,7 @@ function tlp_wnd_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_gs)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_gs)))
 	-- Target
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4])
@@ -1262,7 +1262,7 @@ function tlp_wnd_build(wnd, x, y)
 	-- Current
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[3])
-	imgui.TextUnformatted(string.format("%.1f", XPLMGetDataf(acf_true_as)))
+	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_true_as)))
 	
 	-- Button that target to current aircraft status
 	imgui.TextUnformatted("")
