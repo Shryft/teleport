@@ -323,11 +323,11 @@ function tlp_get_alt()
 	-- read above sea altitude
 	trg_asl = XPLMGetDatad(acf_elv)
 	-- read above ground altitude
-	if trg_trn then
-		trg_agl = trg_asl - trg_trn
-	else
+	--if trg_trn then
+		--trg_agl = trg_asl - trg_trn
+	--else
 		trg_agl = XPLMGetDataf(acf_agl)
-	end
+	--end
 end
 
 -- Target to current position
