@@ -350,25 +350,23 @@ end
 -- Teleport functions
 ----------------------------------------------------------------------------
 -- Teleport aircraft
-function tlp_set_acf(lat, lon, elv,
-				pitch, roll, heading,
-				ground_speed)
-	-- Set inputs
+function tlp_set_acf(lat, lon, elv, ptch, roll, hdng, spd)
+	-- If inputs null
 	local lat = lat or trg_lat
 	local lon = lon or trg_lon
 	local elv = elv or tlp_trg_elv()
-	local pitch = pitch or trg_ptch
+	local ptch = ptch or trg_ptch
 	local roll = roll or trg_roll
-	local heading = heading or trg_hdng
-	local ground_speed = ground_speed or trg_gs
+	local hdng = hdng or trg_hdng
+	local spd = spd or trg_gs
 	-- Move to target state
 	tlp_set_loc(lat, lon, elv)
-	tlp_set_pos(pitch, roll, heading)
-	tlp_set_spd(ground_speed, heading, pitch)
+	tlp_set_pos(ptch, roll, hdng)
+	tlp_set_spd(spd, hdng, ptch)
 end
 
 -- Jump to target world location from input values
-function tlp_set_loc(lat, lon, alt)
+function tlp_set_loc(lat, lon, elv)
 	-- Create variables for converted coordinates
 	local x, y, z
 	-- Check latitude value is correct
@@ -382,51 +380,56 @@ function tlp_set_loc(lat, lon, alt)
 		lon = XPLMGetDatad(acf_lon)
 	end
 	-- Check altitude value is correct
-	if alt < trg_trn then
-		alt = trg_trn
+	if elv < trg_trn then
+		elv = trg_trn
 		trg_asl = trg_trn
 	else
-		if alt == nil or alt < -418 or alt > 37650 then
-			alt = XPLMGetDatad(acf_elv)
-			trg_asl = XPLMGetDatad(acf_elv)
+		if elv == nil then
+			tlp_get_alt()
+			elv = tlp_trg_elv()
+		elseif elv > 37650 then
+			elv = 37650
+			trg_asl = 37650
+			trg_agl = trg_asl - trg_trn
 		end
 	end
+	
 	-- Convert and jump to target location
-	x, y, z = tlp_loc_convert(XPLM.XPLMWorldToLocal, lat, lon, alt)
+	x, y, z = tlp_loc_convert(XPLM.XPLMWorldToLocal, lat, lon, elv)
 	XPLMSetDatad(acf_x, x)
 	XPLMSetDatad(acf_y, y)
 	XPLMSetDatad(acf_z, z)
 end
 
 -- Move airtcraft position
-function tlp_set_pos(pitch, roll, heading)
+function tlp_set_pos(ptch, roll, hdng)
 	-- Move aircraft (camera) to input position via datarefs
-	XPLMSetDataf(acf_ptch, pitch)
+	XPLMSetDataf(acf_ptch, ptch)
 	XPLMSetDataf(acf_roll, roll)
-	XPLMSetDataf(acf_hdng, heading)
+	XPLMSetDataf(acf_hdng, hdng)
 	-- Сonvert from Euler to quaternion
-	pitch = math.pi / 360 * pitch
+	ptch = math.pi / 360 * ptch
 	roll = math.pi / 360 * roll
-	heading = math.pi / 360 * heading
+	hdng = math.pi / 360 * hdng
 	-- Calc position in quaternion array
 	trg_q = {}
-	trg_q[0] = math.cos(heading) * math.cos(pitch) * math.cos(roll) + math.sin(heading) * math.sin(pitch) * math.sin(roll)
-	trg_q[1] = math.cos(heading) * math.cos(pitch) * math.sin(roll) - math.sin(heading) * math.sin(pitch) * math.cos(roll)
-	trg_q[2] = math.cos(heading) * math.sin(pitch) * math.cos(roll) + math.sin(heading) * math.cos(pitch) * math.sin(roll)
-	trg_q[3] = -math.cos(heading) * math.sin(pitch) * math.sin(roll) + math.sin(heading) * math.cos(pitch) * math.cos(roll)
+	trg_q[0] = math.cos(hdng) * math.cos(ptch) * math.cos(roll) + math.sin(hdng) * math.sin(ptch) * math.sin(roll)
+	trg_q[1] = math.cos(hdng) * math.cos(ptch) * math.sin(roll) - math.sin(hdng) * math.sin(ptch) * math.cos(roll)
+	trg_q[2] = math.cos(hdng) * math.sin(ptch) * math.cos(roll) + math.sin(hdng) * math.cos(ptch) * math.sin(roll)
+	trg_q[3] = -math.cos(hdng) * math.sin(ptch) * math.sin(roll) + math.sin(hdng) * math.cos(ptch) * math.cos(roll)
 	-- Move aircraft (physically) to input position via datarefs
 	XPLMSetDatavf(acf_q, trg_q, 0, 4)
 end
 
 -- Speed up aircraft from target position
-function tlp_set_spd(speed, heading, pitch)
+function tlp_set_spd(speed, hdng, ptch)
 	-- Convert input degrees to radians
-	local heading = math.rad(heading)
-	local pitch = math.rad(pitch)
+	local hdng = math.rad(hdng)
+	local ptch = math.rad(ptch)
 	-- Direction and amount of velocity through the target position and speed
-	XPLMSetDataf(acf_vx, speed * math.sin(heading) * math.cos(pitch))
-	XPLMSetDataf(acf_vy, speed * math.sin(pitch))
-	XPLMSetDataf(acf_vz, speed * math.cos(heading) * -1 * math.cos(pitch))
+	XPLMSetDataf(acf_vx, speed * math.sin(hdng) * math.cos(ptch))
+	XPLMSetDataf(acf_vy, speed * math.sin(ptch))
+	XPLMSetDataf(acf_vz, speed * math.cos(hdng) * -1 * math.cos(ptch))
 end
 
 ----------------------------------------------------------------------------
