@@ -841,22 +841,6 @@ function  tlp_wnd_tgl()
 	end
 end
 
--- Create invisible ID for imgui input boxes
-function tlp_wnd_input_id()
-	-- Create empty string value
-	local id_str = ""
-	-- Create string with space
-	local space_str = " "
-	-- Apply 'wnd_input_count' number of spaces to string ID
-	for i = 1, wnd_input_count do
-		id_str = id_str .. space_str
-	end
-	-- Count iteration
-	wnd_input_count = wnd_input_count + 1
-	-- Return string ID
-	return id_str
-end
-
 -- Imgui floating window main function
 function tlp_wnd_build(wnd, x, y)
 	-- Default indent from the edge of the window
@@ -971,7 +955,8 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.PushItemWidth(col_size[4])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lat)
 	-- Create input string for latitude
-    local changed, newVal = imgui.InputText(tlp_wnd_input_id(), trg_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
+	imgui.PushID("Input target latitude")
+    local changed, newVal = imgui.InputText("", trg_lat_str, 10) -- if string inputs label is the same, then the variables overwrite each other
     -- If input value is changed by user
     if changed then
         trg_lat_str = newVal
@@ -985,6 +970,7 @@ function tlp_wnd_build(wnd, x, y)
     end
 	imgui.PopStyleColor()
 	imgui.PopItemWidth()
+	imgui.PopID()
 	
 	-- Longitude
 	-- Variable
@@ -1005,7 +991,8 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.PushItemWidth(col_size[4])
 	imgui.PushStyleColor(imgui.constant.Col.Text, error_lon)
 	-- Create input string for longitude
-    local changed, newVal = imgui.InputText(tlp_wnd_input_id(), trg_lon_str, 10)
+	imgui.PushID("Input target longitude")
+    local changed, newVal = imgui.InputText("", trg_lon_str, 10)
 	-- If input value is changed by user
     if changed then
         trg_lon_str = newVal
@@ -1019,6 +1006,7 @@ function tlp_wnd_build(wnd, x, y)
     end
 	imgui.PopStyleColor()
 	imgui.PopItemWidth()
+	imgui.PopID()
 	
 	-- Type 1 title for altitude
 	imgui.PushStyleColor(imgui.constant.Col.Text, title_1_color)
@@ -1039,21 +1027,25 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDatad(acf_elv)))
 	-- Target
+	imgui.PushID("Input target above sea level altitude")
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[4] - 23)
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_asl)
+	local changed, newInt = imgui.InputInt("", trg_asl)
 	if changed then
 		trg_asl = newInt
 	end
 	imgui.PopItemWidth()
+	imgui.PopID()
 	-- Radio button
+	imgui.PushID("Set elevation mode to above sea level")
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4])
-	if imgui.RadioButton(tlp_wnd_input_id(), trg_elv_mode == 0) then
+	if imgui.RadioButton("", trg_elv_mode == 0) then
 		trg_elv_mode = 0
 	end
+	imgui.PopID()
 	
 	-- AGL (meters above ground level)
 	-- Variable
@@ -1069,11 +1061,12 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3])
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_agl)))
 	-- Target
+	imgui.PushID("Input target above ground level altitude")
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[4] - 23)
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_agl)
+	local changed, newInt = imgui.InputInt("", trg_agl)
 	if changed then
 		if newInt < 0 then
 			trg_agl = 0
@@ -1081,12 +1074,15 @@ function tlp_wnd_build(wnd, x, y)
 			trg_agl = newInt
 		end
 	end
+	imgui.PopID()
 	-- Radio button
+	imgui.PushID("Set elevation mode to above ground level")
 	imgui.SameLine()
 	imgui.SetCursorPosX(indent + col_x[4])
-	if imgui.RadioButton(tlp_wnd_input_id(), trg_elv_mode == 1) then
+	if imgui.RadioButton("", trg_elv_mode == 1) then
 		trg_elv_mode = 1
 	end
+	imgui.PopID()
 	
 	-- MSL (mean sea level)
 	-- Variable
@@ -1129,7 +1125,8 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[4] - 23)
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_ptch)
+	imgui.PushID("Input target pitch")
+	local changed, newInt = imgui.InputInt("", trg_ptch)
 	if changed then
 		-- set limit to max and min pitch angle according to x-plane dataref
 		if newInt < -90 or newInt > 90 then
@@ -1139,6 +1136,7 @@ function tlp_wnd_build(wnd, x, y)
 		end
 	end
 	imgui.PopItemWidth()
+	imgui.PopID()
 	-- Reset button
 	imgui.PushID("Set target pitch to 0")
 	imgui.SameLine()
@@ -1166,7 +1164,8 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[4] - 23)
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_roll)
+	imgui.PushID("Input target roll")
+	local changed, newInt = imgui.InputInt("", trg_roll)
 	if changed then
 		-- create loop for roll target value
 		if newInt < -180 then
@@ -1178,6 +1177,7 @@ function tlp_wnd_build(wnd, x, y)
 		end
 	end
 	imgui.PopItemWidth()
+	imgui.PopID()
 	-- Reset button
 	imgui.PushID("Set target roll to 0")
 	imgui.SameLine()
@@ -1205,7 +1205,8 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[4] - 23)
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_hdng)
+	imgui.PushID("Input target heading")
+	local changed, newInt = imgui.InputInt("", trg_hdng)
 	if changed then
 		-- create loop for heading target value
 		if newInt < 0 then
@@ -1217,6 +1218,7 @@ function tlp_wnd_build(wnd, x, y)
 		end
 	end
 	imgui.PopItemWidth()
+	imgui.PopID()
 	-- Reset button
 	imgui.PushID("Set target heading to 0")
 	imgui.SameLine()
@@ -1263,7 +1265,8 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 	imgui.PushItemWidth(col_size[4])
 	-- Input
-	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_gs)
+	imgui.PushID("Input target ground speed")
+	local changed, newInt = imgui.InputInt("", trg_gs)
 	if changed then
 		-- limit speed
 		if newInt < 0 then
@@ -1273,6 +1276,7 @@ function tlp_wnd_build(wnd, x, y)
 		end
 	end
 	imgui.PopItemWidth()
+	imgui.PopID()
 	
 	-- True airspeed (meter/sec)
 	-- Variable
