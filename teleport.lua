@@ -334,6 +334,12 @@ function tlp_get_spd()
 	trg_gs = XPLMGetDataf(acf_true_as)
 end
 
+-- Reset target position to 0 (pitch & roll)
+function tlp_trg_pos_rst()
+	trg_ptch = 0
+	trg_roll = 0
+end
+
 ----------------------------------------------------------------------------
 -- Teleport functions
 ----------------------------------------------------------------------------
@@ -1475,6 +1481,14 @@ create_command("FlyWithLua/teleport/freeze",
                "tlp_frz_tgl()",
                "",
                "")
+
+-- Teleport aircraft to target state
+create_command("FlyWithLua/teleport/postion_reset",
+               "Reset target position to 0 (pitch & roll)",
+               "tlp_trg_pos_rst()",
+               "",
+               "")
+
 ----------------------------------------------------------------------------
 -- Macro
 ----------------------------------------------------------------------------
