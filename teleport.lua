@@ -1040,9 +1040,9 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDatad(acf_elv)))
 	-- Target
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.PushItemWidth(col_size[4])
+	imgui.PushItemWidth(col_size[4] - 23)
 	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_asl)
 	if changed then
 		trg_asl = newInt
@@ -1050,7 +1050,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.PopItemWidth()
 	-- Radio button
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4] - 22)
+	imgui.SetCursorPosX(indent + col_x[4])
 	if imgui.RadioButton(tlp_wnd_input_id(), trg_elv_mode == 0) then
 		trg_elv_mode = 0
 	end
@@ -1070,9 +1070,9 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_agl)))
 	-- Target
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.PushItemWidth(col_size[4])
+	imgui.PushItemWidth(col_size[4] - 23)
 	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_agl)
 	if changed then
 		if newInt < 0 then
@@ -1083,7 +1083,7 @@ function tlp_wnd_build(wnd, x, y)
 	end
 	-- Radio button
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4] - 22)
+	imgui.SetCursorPosX(indent + col_x[4])
 	if imgui.RadioButton(tlp_wnd_input_id(), trg_elv_mode == 1) then
 		trg_elv_mode = 1
 	end
@@ -1102,7 +1102,7 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDatad(acf_elv) - XPLMGetDataf(acf_agl)))
 	-- Target
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.TextUnformatted(string.format("%.2f", trg_trn))
 	
 	-- Type 1 title for position
@@ -1125,9 +1125,9 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_ptch)))
 	-- Target
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.PushItemWidth(col_size[4])
+	imgui.PushItemWidth(col_size[4] - 23)
 	-- Input
 	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_ptch)
 	if changed then
@@ -1139,6 +1139,14 @@ function tlp_wnd_build(wnd, x, y)
 		end
 	end
 	imgui.PopItemWidth()
+	-- Reset button
+	imgui.PushID("Set target pitch to 0")
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.PushStyleColor(imgui.constant.Col.Text, 0xFFFA9642)
+	if imgui.Button("0", 19, 19) then trg_ptch = 0 end
+	imgui.PopStyleColor()
+	imgui.PopID()
 	
 	-- Aircraft roll
 	-- Variable
@@ -1154,9 +1162,9 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_roll)))
 	-- Target
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.PushItemWidth(col_size[4])
+	imgui.PushItemWidth(col_size[4] - 23)
 	-- Input
 	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_roll)
 	if changed then
@@ -1170,6 +1178,14 @@ function tlp_wnd_build(wnd, x, y)
 		end
 	end
 	imgui.PopItemWidth()
+	-- Reset button
+	imgui.PushID("Set target roll to 0")
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.PushStyleColor(imgui.constant.Col.Text, 0xFFFA9642)
+	if imgui.Button("0", 19, 19) then trg_roll = 0 end
+	imgui.PopStyleColor()
+	imgui.PopID()
 	
 	-- Aircraft heading
 	-- Variable
@@ -1185,9 +1201,9 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.TextUnformatted(string.format("%.2f", XPLMGetDataf(acf_hdng)))
 	-- Target
 	imgui.SameLine()
-	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.SetCursorPosX(indent + col_x[4] + 23)
 	imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
-	imgui.PushItemWidth(col_size[4])
+	imgui.PushItemWidth(col_size[4] - 23)
 	-- Input
 	local changed, newInt = imgui.InputInt(tlp_wnd_input_id(), trg_hdng)
 	if changed then
@@ -1201,6 +1217,14 @@ function tlp_wnd_build(wnd, x, y)
 		end
 	end
 	imgui.PopItemWidth()
+	-- Reset button
+	imgui.PushID("Set target heading to 0")
+	imgui.SameLine()
+	imgui.SetCursorPosX(indent + col_x[4])
+	imgui.PushStyleColor(imgui.constant.Col.Text, 0xFFFA9642)
+	if imgui.Button("0", 19, 19) then trg_hdng = 0 end
+	imgui.PopStyleColor()
+	imgui.PopID()
 	
 	-- Type 1 title for velocity
 	imgui.PushStyleColor(imgui.constant.Col.Text, title_1_color)
