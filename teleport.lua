@@ -323,11 +323,7 @@ function tlp_get_alt()
 	-- read above sea altitude
 	trg_asl = XPLMGetDatad(acf_elv)
 	-- read above ground altitude
-	--if trg_trn then
-		--trg_agl = trg_asl - trg_trn
-	--else
-		trg_agl = XPLMGetDataf(acf_agl)
-	--end
+	trg_agl = trg_asl - trg_trn
 end
 
 -- Target to current position
@@ -342,12 +338,6 @@ end
 function tlp_get_spd()
 	-- read current true airspeed
 	trg_gs = XPLMGetDataf(acf_true_as)
-end
-
--- Reset target position to 0 (pitch & roll)
-function tlp_trg_pos_rst()
-	trg_ptch = 0
-	trg_roll = 0
 end
 
 -- Elevation input switch between sea and ground level
@@ -797,6 +787,20 @@ function target(action, state, name)
 		-- Target status log
 		trg_status = "Deleted '" .. name .. "' from " .. state
 	end
+end
+
+-- Additional startup functions
+function tlp_file_startup()
+	local global_startup = SCRIPT_DIRECTORY .. "teleport_startup.txt"
+	local local_startup = AIRCRAFT_PATH .. acf_name .. "_teleport_startup.txt"
+	if tlp_file_exists(global_startup) then dofile(global_startup) end
+	if tlp_file_exists(local_startup) then dofile(local_startup) end
+end
+
+-- Сheck if file exists
+function tlp_file_exists(name)
+   local f = io.open(name,"r")
+   if f ~= nil then io.close(f) return true else return false end
 end
 
 ----------------------------------------------------------------------------
@@ -1522,13 +1526,6 @@ create_command("FlyWithLua/teleport/freeze",
                "",
                "")
 
--- Teleport aircraft to target state
-create_command("FlyWithLua/teleport/postion_reset",
-               "Reset target position to 0 (pitch & roll)",
-               "tlp_trg_pos_rst()",
-               "",
-               "")
-
 ----------------------------------------------------------------------------
 -- Macro
 ----------------------------------------------------------------------------
@@ -1546,6 +1543,8 @@ tlp_get_loc()
 tlp_acf_gr_on_gnd()
 -- Load probe for Y-terrain testing
 tlp_prb_load()
+-- Probe terrain once
+tlp_prb_loop()
 -- Start Y-terrain probe loop
 prb_loop_id = tlp_loop_start(tlp_prb_loop,
 							XPLM.xplm_FlightLoop_Phase_BeforeFlightModel,
@@ -1554,6 +1553,8 @@ prb_loop_id = tlp_loop_start(tlp_prb_loop,
 tlp_get_alt()
 tlp_get_pos()
 tlp_get_spd()
+-- Load additional startup functions
+tlp_file_startup()
 
 ----------------------------------------------------------------------------
 -- Exit
