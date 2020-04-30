@@ -235,20 +235,22 @@ local trg_gs = nil
 -- Elevation input switch
 local trg_elv_mode = 1
 -- Target files variable and paths
-local trg_file_l
-local trg_file_g
--- Paths to target files
+local file_trg_l_io
+local file_trg_g_io
+-- Paths to files
 local acf_name = string.gsub(AIRCRAFT_FILENAME, ".acf", "")
-local trg_file_l_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
-local trg_file_g_dir = SCRIPT_DIRECTORY .. "teleport_targets.txt"
+local file_trg_l_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_targets.txt"
+local file_trg_g_dir = SCRIPT_DIRECTORY .. "teleport_targets.txt"
+local file_strt_l_dir = AIRCRAFT_PATH .. acf_name .. "_teleport_startup.txt"
+local file_strt_g_dir = SCRIPT_DIRECTORY .. "teleport_startup.txt"
 -- File position for target data (at the description end)
-local trg_file_data = 325
+local file_trg_data = 325
 -- Target load names in data array
-local trg_file_l_array = {""}
-local trg_file_g_array = {""}
+local file_trg_l_array = {""}
+local file_trg_g_array = {""}
 -- Target select name in array
-local trg_file_l_select = 1
-local trg_file_g_select = 1
+local file_trg_l_select = 1
+local file_trg_g_select = 1
 -- Target save data name
 local trg_name = ""
 -- Target data read/write status
@@ -682,7 +684,7 @@ end
 function trg_names(file)
 	local array = {""}
 	-- Go to target read/write position in file
-	file:seek("set", trg_file_data)
+	file:seek("set", file_trg_data)
 	-- Find all targets names
 	for i in file:lines() do
 		for s in string.gmatch(i, "%S+") do
@@ -705,12 +707,12 @@ function target(action, state, name)
 	local trg_data = {}
 	-- Choose a directory depending on state
 	if state == "local" then
-		file = trg_file_l
+		file = file_trg_l_io
 	elseif state == "global" then
-		file = trg_file_g
+		file = file_trg_g_io
 	end
 	-- Go to target read/write position in file
-	file:seek("set", trg_file_data)
+	file:seek("set", file_trg_data)
 	-- Find target for read or delete
 	if action == "load" or action == "delete" then
 		-- Save file position when start reading new line
@@ -773,7 +775,7 @@ function target(action, state, name)
 		-- Read target deleting string
 		junk = string.format(file:read() .. "\n")
 		-- Go to data start position
-		file:seek("set", trg_file_data)
+		file:seek("set", file_trg_data)
 		-- Read all data
 		all_data = file:read("*a")
 		-- Replace deleting target data string by nothing
@@ -781,11 +783,11 @@ function target(action, state, name)
 		-- Reopen in write mode and save fixed data
 		file:close()
 		if state == "local" then
-			trg_new_file(trg_file_l_dir, fixed_data)
-			trg_file_l = trg_load_file(trg_file_l_dir)
+			trg_new_file(file_trg_l_dir, fixed_data)
+			file_trg_l_io = trg_load_file(file_trg_l_dir)
 		elseif state == "global" then
-			trg_new_file(trg_file_g_dir, fixed_data)
-			trg_file_g = trg_load_file(trg_file_g_dir)
+			trg_new_file(file_trg_g_dir, fixed_data)
+			file_trg_g_io = trg_load_file(file_trg_g_dir)
 		end
 		-- Target status log
 		trg_status = "Deleted '" .. name .. "' from " .. state
@@ -793,11 +795,8 @@ function target(action, state, name)
 end
 
 -- Additional startup functions
-function tlp_file_startup()
-	local global_startup = SCRIPT_DIRECTORY .. "teleport_startup.txt"
-	local local_startup = AIRCRAFT_PATH .. acf_name .. "_teleport_startup.txt"
-	if tlp_file_exists(global_startup) then dofile(global_startup) end
-	if tlp_file_exists(local_startup) then dofile(local_startup) end
+function tlp_file_startup(dir)
+	if tlp_file_exists(dir) then dofile(dir) end
 end
 
 -- Сheck if file exists
@@ -1343,32 +1342,32 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.PopItemWidth()
 	
 	-- Get target names to array from local file
-	trg_file_l_array = trg_names(trg_file_l)
+	file_trg_l_array = trg_names(file_trg_l_io)
 	-- Combobox for local targets
 	imgui.PushItemWidth(col_x[3] - 45)
-	if imgui.BeginCombo("local", trg_file_l_array[trg_file_l_select]) then
+	if imgui.BeginCombo("local", file_trg_l_array[file_trg_l_select]) then
 		-- Select only names in array
-		for i = 1, #trg_file_l_array, 8 do
+		for i = 1, #file_trg_l_array, 8 do
 			-- Add selectable target to combobox
-			if imgui.Selectable(trg_file_l_array[i], trg_file_l_select == i) then
+			if imgui.Selectable(file_trg_l_array[i], file_trg_l_select == i) then
 				-- If new target was selected, change current
-				trg_file_l_select = i
+				file_trg_l_select = i
 			end
 		end
 		imgui.EndCombo()
 	end
 	
 	-- Get target names to array from global file
-	trg_file_g_array = trg_names(trg_file_g)
+	file_trg_g_array = trg_names(file_trg_g_io)
 	-- Combobox for global targets
 	imgui.SameLine()
-	if imgui.BeginCombo("global", trg_file_g_array[trg_file_g_select]) then
+	if imgui.BeginCombo("global", file_trg_g_array[file_trg_g_select]) then
 		-- Select only names in array
-		for i = 1, #trg_file_g_array, 8 do
+		for i = 1, #file_trg_g_array, 8 do
 			-- Add selectable target to combobox
-			if imgui.Selectable(trg_file_g_array[i], trg_file_g_select == i) then
+			if imgui.Selectable(file_trg_g_array[i], file_trg_g_select == i) then
 				-- If new target was selected, change current
-				trg_file_g_select = i
+				file_trg_g_select = i
 			end
 		end
 		imgui.EndCombo()
@@ -1392,11 +1391,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[2] / 2)
 	if imgui.Button("Load", but_1_x - indent / 4, but_1_y) then
 		-- Check first that the target is selected
-		if trg_file_l_select == 1 then
+		if file_trg_l_select == 1 then
 			trg_status = "Error! Select the local target to load!"
 		else
-			target("load", "local", trg_file_l_array[trg_file_l_select])
-			trg_file_l_select = 1
+			target("load", "local", file_trg_l_array[file_trg_l_select])
+			file_trg_l_select = 1
 		end
 	end
 	
@@ -1405,11 +1404,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[3] / 4 * 3 + indent / 4)
 	if imgui.Button("Delete", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is selected
-		if trg_file_l_select == 1 then
+		if file_trg_l_select == 1 then
 			trg_status = "Error! Select the local target to delete!"
 		else
-			target("delete", "local", trg_file_l_array[trg_file_l_select])
-			trg_file_l_select = 1
+			target("delete", "local", file_trg_l_array[file_trg_l_select])
+			file_trg_l_select = 1
 		end
 	end
 	
@@ -1431,11 +1430,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[4] / 6 * 5 + indent / 4)
 	if imgui.Button(" Load ", but_1_x - indent / 4, but_1_y) then
 		-- Check first that the target is selected
-		if trg_file_g_select == 1 then
+		if file_trg_g_select == 1 then
 			trg_status = "Error! Select the global target to load!"
 		else
-			target("load", "global", trg_file_g_array[trg_file_g_select])
-			trg_file_g_select = 1
+			target("load", "global", file_trg_g_array[file_trg_g_select])
+			file_trg_g_select = 1
 		end
 	end
 	
@@ -1444,11 +1443,11 @@ function tlp_wnd_build(wnd, x, y)
 	imgui.SetCursorPosX(indent + col_x[4] / 6 * 7 + indent / 2)
 	if imgui.Button("Delete ", but_1_x / 2 - indent / 2, but_1_y) then
 		-- Check first that the target is selected
-		if trg_file_g_select == 1 then
+		if file_trg_g_select == 1 then
 			trg_status = "Error! Select the global target to delete!"
 		else
-			target("delete", "global", trg_file_g_array[trg_file_g_select])
-			trg_file_g_select = 1
+			target("delete", "global", file_trg_g_array[file_trg_g_select])
+			file_trg_g_select = 1
 		end
 	end
 	
@@ -1538,8 +1537,8 @@ create_command("FlyWithLua/teleport/freeze",
 -- Startup
 ----------------------------------------------------------------------------
 -- Load targets data files
-trg_file_l = trg_load_file(trg_file_l_dir)
-trg_file_g = trg_load_file(trg_file_g_dir)
+file_trg_l_io = trg_load_file(file_trg_l_dir)
+file_trg_g_io = trg_load_file(file_trg_g_dir)
 -- Get target location to start Y-terrain probe
 tlp_get_loc()
 -- Set gear on ground height
@@ -1557,7 +1556,8 @@ tlp_get_alt()
 tlp_get_pos()
 tlp_get_spd()
 -- Load additional startup functions
-tlp_file_startup()
+tlp_file_startup(file_strt_l_dir)
+tlp_file_startup(file_strt_g_dir)
 
 ----------------------------------------------------------------------------
 -- Exit
@@ -1572,8 +1572,8 @@ function tlp_exit()
 	-- Stop forces override
 	if frz_enable then XPLMSetDatai(override_forces, 0) end
 	-- Close target data files
-	trg_file_l:close()
-	trg_file_g:close()
+	file_trg_l_io:close()
+	file_trg_g_io:close()
 end
 -- Start event on exit
 do_on_exit("tlp_exit()")
