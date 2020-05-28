@@ -220,18 +220,18 @@ local wnd_y = 590
 local trg_lat_str = ""
 local trg_lon_str = ""
 -- World coordinates input variables
-local trg_lat = nil
-local trg_lon = nil
+local trg_lat = 0
+local trg_lon = 0
 -- Altitude input variables
-local trg_asl = nil
-local trg_agl = nil
-local trg_trn = nil
+local trg_asl = 0
+local trg_agl = 0
+local trg_trn = 0
 -- Aircraft position input
-local trg_ptch = nil
-local trg_roll = nil
-local trg_hdng = nil
+local trg_ptch = 0
+local trg_roll = 0
+local trg_hdng = 0
 -- Aircraft groundspeed input
-local trg_gs = nil
+local trg_gs = 0
 -- Elevation input switch
 local trg_elv_mode = 1
 -- Target files variable and paths
@@ -321,25 +321,33 @@ function tlp_get_loc()
 end
 
 -- Target to current altitude
-function tlp_get_alt()
-	-- read above sea altitude
-	trg_asl = XPLMGetDatad(acf_elv)
-	-- read above ground altitude
-	trg_agl = trg_asl - trg_trn
+function tlp_get_alt(asl, agl)
+	-- take input or get current altitude
+	local asl = asl or XPLMGetDatad(acf_elv)
+	local agl = agl or asl - trg_trn
+	-- target aircraft altitude
+	trg_asl = asl
+	trg_agl = agl
 end
 
 -- Target to current position
-function tlp_get_pos()
-	-- read current aircraft position
-	trg_ptch = XPLMGetDataf(acf_ptch)
-	trg_roll = XPLMGetDataf(acf_roll)
-	trg_hdng = XPLMGetDataf(acf_hdng)
+function tlp_get_pos(ptch, roll, hdng)
+	-- take input or get current position
+	local ptch = ptch or XPLMGetDataf(acf_ptch)
+	local roll = roll or XPLMGetDataf(acf_roll)
+	local hdng = hdng or XPLMGetDataf(acf_hdng)
+	-- target aircraft position
+	trg_ptch = ptch
+	trg_roll = roll
+	trg_hdng = hdng
 end
 
 -- Target to current airspeed
-function tlp_get_spd()
-	-- read current true airspeed
-	trg_gs = XPLMGetDataf(acf_true_as)
+function tlp_get_spd(spd)
+	-- take input or get current speed
+	local spd = spd or XPLMGetDataf(acf_true_as)
+	-- target aircraft speed
+	trg_gs = spd
 end
 
 -- Elevation input switch between sea and ground level
@@ -1552,9 +1560,10 @@ prb_loop_id = tlp_loop_start(tlp_prb_loop,
 							XPLM.xplm_FlightLoop_Phase_BeforeFlightModel,
 							prb_loop_id)
 -- Get other targets at start
+tlp_get_loc()
 tlp_get_alt()
 tlp_get_pos()
-tlp_get_spd()
+-- tlp_get_spd()
 -- Load additional startup functions
 tlp_file_startup(file_strt_l_dir)
 tlp_file_startup(file_strt_g_dir)
